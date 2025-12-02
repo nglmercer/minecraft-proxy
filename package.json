@@ -1,0 +1,32 @@
+{
+  "name": "tcp-server",
+  "module": "index.ts",
+  "type": "module",
+  "version": "0.1.0",
+  "description": "A lightweight Minecraft TCP tunnel library",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "start": "bun run src/proxy.ts",
+    "test": "bun test",
+    "build": "bunx tsc -p tsconfig.build.json",
+    "prepublishOnly": "bun test && bun run build"
+  },
+  "keywords": [
+    "minecraft",
+    "proxy",
+    "tunnel",
+    "tcp"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
