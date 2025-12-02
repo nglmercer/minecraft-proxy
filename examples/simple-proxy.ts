@@ -1,16 +1,16 @@
 import { startProxy } from '../src/index.js';
 async function main(
-    listenPort: number = 25566,
-    backendHost: string = 'localhost',
-    backendPort: number = 25565,
+    proxyPort: number = 25566,
+    minecraftHost: string = 'localhost',
+    minecraftPort: number = 25565,
     debug: boolean = true
 ) {
     try {
         const server = await startProxy({
-            listenPort: listenPort,
-            backendHost: backendHost,
-            backendPort: backendPort,
-            debug: debug,
+            proxyPort,
+            minecraftHost,
+            minecraftPort,
+            debug,
         });
 
         return server;

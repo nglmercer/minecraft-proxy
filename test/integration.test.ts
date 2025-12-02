@@ -32,9 +32,9 @@ describe('Integration Test (Real TCP Sockets)', () => {
 
         // 2. Start the Proxy
         proxyServer = await startProxy({
-            listenPort: PROXY_PORT,
-            backendHost: 'localhost',
-            backendPort: BACKEND_PORT,
+            proxyPort: PROXY_PORT,
+            minecraftHost: 'localhost',
+            minecraftPort: BACKEND_PORT,
             debug: true,
         });
 

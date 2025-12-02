@@ -10,7 +10,7 @@ export async function startProxy(config?: Partial<ProxyConfig>) {
   const fullConfig = createConfig(config);
   const server = Bun.listen<{ handler: ConnectionHandler }>({
     hostname: '0.0.0.0',
-    port: fullConfig.listenPort,
+    port: fullConfig.proxyPort,
     socket: {
       open: (client) => {
         const handler = new ConnectionHandler(fullConfig);
@@ -40,8 +40,8 @@ export async function startProxy(config?: Partial<ProxyConfig>) {
     },
   });
 
-  console.log(`Minecraft proxy listening on port ${fullConfig.listenPort}`);
-  console.log(`Backend: ${fullConfig.backendHost}:${fullConfig.backendPort}`);
+  console.log(`Minecraft proxy listening on port ${fullConfig.proxyPort}`);
+  console.log(`Forwarding to Minecraft server: ${fullConfig.minecraftHost}:${fullConfig.minecraftPort}`);
   if (fullConfig.debug) {
     console.log('Debug mode enabled');
   }

@@ -95,11 +95,11 @@ export class ConnectionHandler {
 
       // Connect to backend
       this.connectFunction({
-        hostname: this.config.backendHost,
-        port: this.config.backendPort,
+        hostname: this.config.minecraftHost,
+        port: this.config.minecraftPort,
         socket: {
           open: (backend: Socket) => {
-            log(`Connected to backend at ${this.config.backendHost}:${this.config.backendPort}`);
+            log(`Connected to Minecraft server at ${this.config.minecraftHost}:${this.config.minecraftPort}`);
             this.backendSocket = backend;
 
             // Send handshake packet to backend

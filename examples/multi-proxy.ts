@@ -7,24 +7,24 @@ async function main() {
     console.log('Starting Multi-Proxy Network...');
 
     // Proxy 1: Survival Server
-    // Listens on 25565 -> Forwards to 25575
+    // Listens on 25566 -> Forwards to 25565
     const survivalProxy = await startProxy({
-        listenPort: 25565,
-        backendHost: 'localhost',
-        backendPort: 25575,
+        proxyPort: 25566,
+        minecraftHost: 'localhost',
+        minecraftPort: 25565,
         debug: true,
     });
-    console.log('Survival Proxy listening on :25565 -> :25575');
+    console.log('Survival Proxy listening on :25566 -> :25565');
 
     // Proxy 2: Creative Server
-    // Listens on 25566 -> Forwards to 25576
+    // Listens on 25567 -> Forwards to 25565
     const creativeProxy = await startProxy({
-        listenPort: 25566,
-        backendHost: 'localhost',
-        backendPort: 25576,
+        proxyPort: 25567,
+        minecraftHost: 'localhost',
+        minecraftPort: 25565,
         debug: true,
     });
-    console.log('Creative Proxy listening on :25566 -> :25576');
+    console.log('Creative Proxy listening on :25567 -> :25565');
 
     console.log('All proxies started. Press Ctrl+C to stop.');
 }

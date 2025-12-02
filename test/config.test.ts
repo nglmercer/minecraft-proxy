@@ -3,9 +3,9 @@ import { defaultConfig, createConfig, type ProxyConfig } from '../src/config.js'
 
 describe('Config', () => {
   test('defaultConfig has correct values', () => {
-    expect(defaultConfig.listenPort).toBe(25565);
-    expect(defaultConfig.backendHost).toBe('localhost');
-    expect(defaultConfig.backendPort).toBe(25566);
+    expect(defaultConfig.proxyPort).toBe(25566);
+    expect(defaultConfig.minecraftHost).toBe('localhost');
+    expect(defaultConfig.minecraftPort).toBe(25565);
     expect(defaultConfig.debug).toBe(false);
   });
 
@@ -16,14 +16,14 @@ describe('Config', () => {
 
   test('createConfig merges overrides correctly', () => {
     const overrides: Partial<ProxyConfig> = {
-      listenPort: 3000,
-      backendHost: 'example.com',
+      proxyPort: 3000,
+      minecraftHost: 'example.com',
       debug: true,
     };
     const config = createConfig(overrides);
-    expect(config.listenPort).toBe(3000);
-    expect(config.backendHost).toBe('example.com');
-    expect(config.backendPort).toBe(25566); // default
+    expect(config.proxyPort).toBe(3000);
+    expect(config.minecraftHost).toBe('example.com');
+    expect(config.minecraftPort).toBe(25565); // default
     expect(config.debug).toBe(true);
   });
 
@@ -34,9 +34,9 @@ describe('Config', () => {
 
   test('createConfig can override all properties', () => {
     const overrides: ProxyConfig = {
-      listenPort: 4000,
-      backendHost: 'test.com',
-      backendPort: 4001,
+      proxyPort: 4000,
+      minecraftHost: 'test.com',
+      minecraftPort: 4001,
       debug: true,
     };
     const config = createConfig(overrides);

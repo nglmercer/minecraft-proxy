@@ -48,11 +48,11 @@ You can import `startProxy` to use it within your own TypeScript application.
 ```typescript
 import { startProxy } from 'minecraft-tcp-proxy';
 
-// Start a proxy on port 25565 that forwards to a backend on localhost:25575
+// Start a proxy on port 25566 that forwards to a backend on localhost:25565
 const server = await startProxy({
-  listenPort: 25565,
+  listenPort: 25566,
   backendHost: 'localhost',
-  backendPort: 25575,
+  backendPort: 25565,
   debug: true,
 });
 

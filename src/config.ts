@@ -3,12 +3,12 @@
  */
 
 export interface ProxyConfig {
-  /** Port to listen for incoming Minecraft connections */
-  listenPort: number;
-  /** Hostname of the backend Minecraft server */
-  backendHost: string;
-  /** Port of the backend Minecraft server */
-  backendPort: number;
+  /** Port where the proxy listens for incoming Minecraft client connections */
+  proxyPort: number;
+  /** Hostname of the actual Minecraft server */
+  minecraftHost: string;
+  /** Port of the actual Minecraft server */
+  minecraftPort: number;
   /** Whether to enable debug logging */
   debug: boolean;
 }
@@ -17,9 +17,9 @@ export interface ProxyConfig {
  * Default configuration.
  */
 export const defaultConfig: ProxyConfig = {
-  listenPort: 25566,
-  backendHost: 'localhost',
-  backendPort: 25565,
+  proxyPort: 25566,
+  minecraftHost: 'localhost',
+  minecraftPort: 25565,
   debug: false,
 };
 
