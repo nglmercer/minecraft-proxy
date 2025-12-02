@@ -1,5 +1,4 @@
 import { parseHandshake } from './handshake.js';
-import { createTunnel } from './tunnel.js';
 import type { ProxyConfig } from './config.js';
 
 type Socket = any; // To avoid TypeScript issues with Bun's Socket
@@ -19,36 +18,63 @@ export class ConnectionHandler {
   /**
    * Handles a new client connection.
    */
-  handleConnection(client: Socket): void {
+  /**
+   * Handles data received from the client.
+   */
+  private clientBuffer: Buffer[] = [];
+  private isConnecting = false;
+
+  handleClientData(client: Socket, data: Buffer): void {
     const log = this.config.debug ? console.log : () => { };
-    log(`New connection from ${client.remoteAddress}:${client.remotePort}`);
 
-    const cleanup = () => {
-      if (client.readyState === 'open') {
-        client.end();
+    if (this.handshakeParsed) {
+      // If we have a backend socket instance, try to write to it directly.
+      if (this.backendSocket) {
+        // Bun's socket.write returns bytes written or throws/returns 0 if closed
+        try {
+          // Check state loosely or just try write
+          if (this.backendSocket.readyState === 'open' || this.backendSocket.readyState === 1) {
+            this.backendSocket.write(data);
+          } else {
+            log(`Backend socket not open (state: ${this.backendSocket.readyState}), cannot forward data.`);
+            // If it was previously open, this means it closed.
+            // We should probably close the client too.
+            this.cleanup(client);
+          }
+        } catch (err) {
+          log(`Error writing to backend: ${err}`);
+          this.cleanup(client);
+        }
+      } else {
+        // Handshake parsed but backendSocket is null -> We are strictly in "Connecting" phase.
+        log(`Buffering ${data.length} bytes from client (connecting to backend)`);
+        this.clientBuffer.push(data);
       }
-      if (this.backendSocket && this.backendSocket.readyState === 'open') {
-        this.backendSocket.end();
-      }
-    };
+      return;
+    }
 
-    // Handle client data
-    client.data = (data: Buffer) => {
-      if (!this.handshakeParsed) {
-        this.handleHandshake(client, data, cleanup, log);
-      }
-      // Once handshake is parsed, the tunnel will handle further data
-    };
+    this.handleHandshake(client, data, () => this.cleanup(client), log);
+  }
 
-    client.close = () => {
-      log('Client disconnected before handshake completed');
-      cleanup();
-    };
+  handleClientClose(client: Socket): void {
+    const log = this.config.debug ? console.log : () => { };
+    log('Client disconnected');
+    this.cleanup(client);
+  }
 
-    client.error = (error: Error) => {
-      log(`Client socket error: ${error}`);
-      cleanup();
-    };
+  handleClientError(client: Socket, error: Error): void {
+    const log = this.config.debug ? console.log : () => { };
+    log(`Client socket error: ${error}`);
+    this.cleanup(client);
+  }
+
+  private cleanup(client: Socket) {
+    if (client.readyState === 'open') {
+      client.end();
+    }
+    if (this.backendSocket && this.backendSocket.readyState === 'open') {
+      this.backendSocket.end();
+    }
   }
 
   /**
@@ -77,35 +103,49 @@ export class ConnectionHandler {
             this.backendSocket = backend;
 
             // Send handshake packet to backend
-            backend.write(this.handshakeBuffer.slice(0, bytesRead));
+            const writtenHandshake = backend.write(this.handshakeBuffer.slice(0, bytesRead));
+            log(`Sent handshake to backend: ${writtenHandshake} bytes`);
 
             // Send any leftover data
             if (bytesRead < this.handshakeBuffer.length) {
               const leftover = this.handshakeBuffer.slice(bytesRead);
-              backend.write(leftover);
+              const writtenLeftover = backend.write(leftover);
+              log(`Sent leftover data to backend: ${writtenLeftover} bytes`);
             }
 
-            // Create tunnel between client and backend
-            createTunnel(client, backend, {
-              onClose: () => {
-                log('Tunnel closed');
-              },
-              onError: (error) => {
-                log(`Tunnel error: ${error}`);
-                cleanup();
-              },
-              debug: this.config.debug,
-            });
+            log('Tunnel established');
+
+            // Flush buffered client data
+            if (this.clientBuffer.length > 0) {
+              log(`Flushing ${this.clientBuffer.length} buffered packets to backend`);
+              for (const chunk of this.clientBuffer) {
+                backend.write(chunk);
+              }
+              this.clientBuffer = [];
+            }
           },
           data: (backend: Socket, chunk: Buffer) => {
-            // This should not be called because tunnel handles data forwarding
+            log(`Received ${chunk.length} bytes from backend`);
+            // Forward data to client
+            // Bun might return readyState as string 'open' or number 1
+            if (client.readyState === 'open' || client.readyState === 1) {
+              const written = client.write(chunk);
+              log(`Forwarded to client: ${written} bytes`);
+            } else {
+              log(`Client not open (state: ${client.readyState}), closing backend`);
+              backend.end();
+            }
+          },
+          drain: (backend: Socket) => {
+            // Optional: handle backpressure
           },
           close: (backend: Socket) => {
-            log('Backend connection closed during handshake');
+            log('Backend connection closed');
+            this.cleanup(client);
           },
           error: (backend: Socket, error: Error) => {
             log(`Backend connection error: ${error}`);
-            cleanup();
+            this.cleanup(client);
           },
         },
       }).catch((error) => {

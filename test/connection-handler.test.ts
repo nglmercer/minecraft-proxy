@@ -63,16 +63,10 @@ describe('ConnectionHandler', () => {
     });
 
     test('should connect to backend after receiving valid handshake', () => {
-        handler.handleConnection(mockClient);
+        // handler.handleConnection(mockClient); // No longer needed
 
         // Construct a valid handshake packet
-        // Packet Length + Packet ID (0x00) + Protocol Version + Server Address + Server Port + Next State
-        // Let's make a simple one.
-        // Protocol Version: 763 (1.20.1) -> VarInt
-        // Server Address: "localhost" -> String (VarInt length + bytes)
-        // Server Port: 25565 -> UShort (2 bytes)
-        // Next State: 1 (Status) -> VarInt
-
+        // ... (omitted for brevity, same construction logic)
         const protocolVersion = 763;
         const serverAddress = 'localhost';
         const serverPort = 25565;
@@ -80,28 +74,22 @@ describe('ConnectionHandler', () => {
 
         const buffer = new Uint8Array(1024);
         let offset = 0;
-
-        // We need to calculate packet length first, but it's easier to write body then prepend length.
-        // Body starts at offset 0 for now (we'll shift it later or just write to a separate buffer)
         const bodyBuffer = new Uint8Array(1024);
         let bodyOffset = 0;
 
         bodyOffset = writeVarIntSync(bodyBuffer, 0x00, bodyOffset); // Packet ID
         bodyOffset = writeVarIntSync(bodyBuffer, protocolVersion, bodyOffset);
 
-        // String: length + bytes
         const addressBytes = new TextEncoder().encode(serverAddress);
         bodyOffset = writeVarIntSync(bodyBuffer, addressBytes.length, bodyOffset);
         bodyBuffer.set(addressBytes, bodyOffset);
         bodyOffset += addressBytes.length;
 
-        // Port: 2 bytes big endian
         bodyBuffer[bodyOffset++] = (serverPort >> 8) & 0xFF;
         bodyBuffer[bodyOffset++] = serverPort & 0xFF;
 
         bodyOffset = writeVarIntSync(bodyBuffer, nextState, bodyOffset);
 
-        // Now write length + body
         offset = writeVarIntSync(buffer, bodyOffset, offset);
         buffer.set(bodyBuffer.slice(0, bodyOffset), offset);
         offset += bodyOffset;
@@ -109,11 +97,11 @@ describe('ConnectionHandler', () => {
         const handshakePacket = buffer.slice(0, offset);
 
         // Send handshake
-        mockClient.triggerData(handshakePacket);
+        handler.handleClientData(mockClient, handshakePacket as any); // Cast because Buffer vs Uint8Array
 
         // Verify connection to backend
         expect(mockConnect).toHaveBeenCalled();
-        const connectArgs = mockConnect.mock.calls[0][0];
+        const connectArgs = mockConnect.mock.calls[0]![0];
         expect(connectArgs.hostname).toBe('backend.example.com');
         expect(connectArgs.port).toBe(25565);
 
@@ -122,28 +110,23 @@ describe('ConnectionHandler', () => {
     });
 
     test('should wait for more data if handshake is incomplete', () => {
-        handler.handleConnection(mockClient);
-
-        // Send just the packet length (assuming it's small enough to be 1 byte)
-        // But we need to send at least something that looks like a VarInt
+        // Send just the packet length
         const buffer = new Uint8Array([0x05]); // Length 5
-        mockClient.triggerData(buffer);
+        handler.handleClientData(mockClient, buffer as any);
 
         // Should NOT connect yet
         expect(mockConnect).not.toHaveBeenCalled();
 
         // Send more data (but still not enough)
-        mockClient.triggerData(new Uint8Array([0x00])); // Packet ID
+        handler.handleClientData(mockClient, new Uint8Array([0x00]) as any); // Packet ID
 
         expect(mockConnect).not.toHaveBeenCalled();
     });
 
     test('should close connection on invalid handshake (wrong packet ID)', () => {
-        handler.handleConnection(mockClient);
-
         // Packet Length: 1, Packet ID: 0x01 (Ping, not Handshake)
         const buffer = new Uint8Array([0x01, 0x01]);
-        mockClient.triggerData(buffer);
+        handler.handleClientData(mockClient, buffer as any);
 
         expect(mockConnect).not.toHaveBeenCalled();
         expect(mockClient.end).toHaveBeenCalled();

@@ -12,6 +12,7 @@
   "scripts": {
     "start": "bun run src/proxy.ts",
     "test": "bun test",
+    "typecheck": "bunx tsc --noEmit",
     "build": "bunx tsc -p tsconfig.build.json",
     "prepublishOnly": "bun test && bun run build"
   },

@@ -8,22 +8,34 @@ import { ConnectionHandler } from './connection-handler.js';
  */
 export async function startProxy(config?: Partial<ProxyConfig>) {
   const fullConfig = createConfig(config);
-  const connectionHandler = new ConnectionHandler(fullConfig);
-
-  const server = Bun.listen({
+  const server = Bun.listen<{ handler: ConnectionHandler }>({
     hostname: '0.0.0.0',
     port: fullConfig.listenPort,
     socket: {
       open: (client) => {
-        connectionHandler.handleConnection(client);
+        const handler = new ConnectionHandler(fullConfig);
+        client.data = { handler };
+        if (fullConfig.debug) {
+          console.log(`New connection from ${client.remoteAddress}:${client.remotePort}`);
+        }
       },
       close: (client) => {
-        if (fullConfig.debug) {
-          console.log('Socket closed');
+        const handler = (client.data as any)?.handler as ConnectionHandler;
+        if (handler) {
+          handler.handleClientClose(client);
         }
       },
       error: (client, error) => {
-        console.error('Socket error:', error);
+        const handler = (client.data as any)?.handler as ConnectionHandler;
+        if (handler) {
+          handler.handleClientError(client, error);
+        }
+      },
+      data: (client, data) => {
+        const handler = (client.data as any)?.handler as ConnectionHandler;
+        if (handler) {
+          handler.handleClientData(client, data);
+        }
       },
     },
   });

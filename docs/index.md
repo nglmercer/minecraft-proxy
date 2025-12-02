@@ -134,144 +134,63 @@ export function parseHandshake(buffer: Uint8Array): { handshake: Handshake; byte
 }
 ```
 
-### Tunnel Manager (`src/tunnel.ts`)
 
-`createTunnel` sets up event handlers on both sockets to forward data and ensures proper cleanup when either side closes or errors.
 
-```typescript
-export function createTunnel(
-  client: Socket,
-  backend: Socket,
-  options: TunnelOptions = {}
-): void {
-  const { onClose, onError, debug = false } = options;
-  const log = debug ? console.log : () => {};
+### ConnectionHandler (`src/connection-handler.ts`)
 
-  let clientClosed = false;
-  let backendClosed = false;
-
-  const closeTunnel = () => {
-    if (clientClosed && backendClosed) return;
-    log('Closing tunnel');
-    if (!clientClosed && client.readyState === 'open') {
-      client.end();
-      clientClosed = true;
-    }
-    if (!backendClosed && backend.readyState === 'open') {
-      backend.end();
-      backendClosed = true;
-    }
-    onClose?.();
-  };
-
-  client.data = (data: Buffer) => {
-    if (backend.readyState === 'open') backend.write(data);
-    else closeTunnel();
-  };
-
-  backend.data = (data: Buffer) => {
-    if (client.readyState === 'open') client.write(data);
-    else closeTunnel();
-  };
-
-  client.close = () => {
-    log('Client disconnected');
-    clientClosed = true;
-    closeTunnel();
-  };
-
-  backend.close = () => {
-    log('Backend disconnected');
-    backendClosed = true;
-    closeTunnel();
-  };
-
-  client.error = (error: Error) => {
-    log(`Client socket error: ${error}`);
-    onError?.(error);
-    closeTunnel();
-  };
-
-  backend.error = (error: Error) => {
-    log(`Backend socket error: ${error}`);
-    onError?.(error);
-    closeTunnel();
-  };
-
-  log('Tunnel established');
-}
-```
-
-### Connection Handler (`src/connection-handler.ts`)
-
-The `ConnectionHandler` class manages the lifecycle of a client connection: it buffers data until a complete handshake is received, connects to the backend, forwards the handshake (and any leftover data), and finally creates the tunnel.
+The `ConnectionHandler` class manages the lifecycle of a single client connection. It buffers data until a complete handshake is received, connects to the backend, forwards the handshake (and any leftover data), and finally creates the tunnel.
 
 Key methods:
 
-- `handleConnection(client: Socket)` – entry point for a new client.
-- `handleHandshake(...)` – attempts to parse the handshake; on success, establishes backend connection and tunnel.
+- `handleClientData(client, data)` – Processes incoming data. If handshake is not yet parsed, it buffers and attempts to parse. If parsed, it forwards to backend.
+- `handleClientClose(client)` – Cleans up resources when client disconnects.
+- `handleClientError(client, error)` – Handles client errors.
 
 ```typescript
 export class ConnectionHandler {
-  private config: ProxyConfig;
-  private handshakeBuffer = new Uint8Array();
-  private handshakeParsed = false;
-  private backendSocket: Socket | null = null;
-
-  constructor(config: ProxyConfig) {
-    this.config = config;
-  }
-
-  handleConnection(client: Socket): void {
-    // ...
-    client.data = (data: Buffer) => {
-      if (!this.handshakeParsed) {
-        this.handleHandshake(client, data, cleanup, log);
+  // ...
+  handleClientData(client: Socket, data: Buffer): void {
+    if (this.handshakeParsed) {
+      // Forward to backend
+      if (this.backendSocket?.readyState === 'open') {
+        this.backendSocket.write(data);
       }
-    };
-    // ...
+      return;
+    }
+    this.handleHandshake(client, data, ...);
   }
-
-  private handleHandshake(client: Socket, data: Buffer, cleanup: () => void, log: (...args: any[]) => void): void {
-    // Append data, try to parse
-    // On success:
-    Bun.connect({
-      hostname: this.config.backendHost,
-      port: this.config.backendPort,
-      socket: {
-        open: (backend) => {
-          // Send handshake and leftover data
-          // Create tunnel
-        },
-        // error handling
-      },
-    });
-  }
+  // ...
 }
 ```
 
 ### Proxy Server (`src/proxy.ts`)
 
-The main entry point is `startProxy`, which creates the TCP listener and delegates each connection to a `ConnectionHandler`.
+The main entry point is `startProxy`, which creates the TCP listener. For each new connection, it instantiates a **new** `ConnectionHandler` and attaches it to the client socket's data.
 
 ```typescript
 export async function startProxy(config?: Partial<ProxyConfig>) {
   const fullConfig = createConfig(config);
-  const connectionHandler = new ConnectionHandler(fullConfig);
 
-  const server = Bun.listen({
+  const server = Bun.listen<{ handler: ConnectionHandler }>({
     hostname: '0.0.0.0',
     port: fullConfig.listenPort,
     socket: {
-      open: (client) => connectionHandler.handleConnection(client),
-      close: (client) => { if (fullConfig.debug) console.log('Socket closed'); },
-      error: (client, error) => console.error('Socket error:', error),
+      open: (client) => {
+        const handler = new ConnectionHandler(fullConfig);
+        client.data = { handler };
+      },
+      data: (client, data) => {
+        client.data.handler.handleClientData(client, data);
+      },
+      close: (client) => {
+        client.data.handler.handleClientClose(client);
+      },
+      error: (client, error) => {
+        client.data.handler.handleClientError(client, error);
+      },
     },
   });
 
-  console.log(`Minecraft proxy listening on port ${fullConfig.listenPort}`);
-  console.log(`Backend: ${fullConfig.backendHost}:${fullConfig.backendPort}`);
-  if (fullConfig.debug) console.log('Debug mode enabled');
   return server;
 }
 ```
