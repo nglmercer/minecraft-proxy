@@ -51,8 +51,14 @@ export class BridgeServer {
                     }
 
                     if (state.type === 'PLAYER') {
-                        // If it's a player, send to agent socket (DATA channel)
-                        state.target?.write(data);
+                        // If tunnel is ready, forward
+                        if (state.target) {
+                            state.target.write(data);
+                        } else {
+                            // Tunnel not ready yet, buffer this packet too!
+                            // Important: Copy the data to ensure it persists safely
+                            state.buffer.push(new Uint8Array(data));
+                        }
                         return;
                     }
 
@@ -91,6 +97,7 @@ export class BridgeServer {
                                 // Flush player buffer if data was waiting
                                 const playerBuffer = playerSocket.data.buffer;
                                 if (playerBuffer.length > 0) {
+                                    this.log(`Flushing ${playerBuffer.length} buffered packets for ${connId}`);
                                     for (const chunk of playerBuffer) {
                                         socket.write(chunk);
                                     }
@@ -111,7 +118,7 @@ export class BridgeServer {
                         state.type = 'PLAYER';
 
                         // Save this first packet in buffer because tunnel isn't ready
-                        state.buffer.push(data);
+                        state.buffer.push(new Uint8Array(data));
 
                         if (!this.controlSocket) {
                             this.log('No agent connected. Dropping player.');
@@ -157,7 +164,6 @@ export class BridgeServer {
                 socket.end();
             }
         }
-        // ... other control logic if any ...
     }
 
     private log(msg: string) {

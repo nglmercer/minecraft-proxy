@@ -85,23 +85,29 @@ describe('Reverse Tunnel (Bridge + Agent)', () => {
             }
         });
 
-        // Wait for tunnel establishment
-        await delay(500);
+        // NO DELAY here! We want to test buffering.
+        // Send data immediately: Player -> Bridge -> Agent -> Local Server
+        const msg1 = 'Packet 1 (Handshake)';
+        const msg2 = 'Packet 2 (Login)';
 
-        // Send data: Player -> Bridge -> Agent -> Local Server
-        const testMessage = 'Hello from Player!';
-        playerClient.write(testMessage);
+        playerClient.write(msg1);
+        // Small yield to ensure they might be treated as separate events if OS allows, 
+        // but close enough to hit the "Tunnel not ready" race.
+        await delay(10);
+        playerClient.write(msg2);
 
-        // Wait for data propagation
-        await delay(500);
+        // Wait for data propagation (end-to-end)
+        await delay(1000);
 
-        // Verify Local Server received it
+        // Verify Local Server received BOTH
         const receivedStr = Buffer.concat(localServerReceivedData).toString();
-        expect(receivedStr).toContain(testMessage);
+        expect(receivedStr).toContain(msg1);
+        expect(receivedStr).toContain(msg2);
 
         // Verify Echo: Local Server -> Agent -> Bridge -> Player
         const clientReceivedStr = Buffer.concat(clientReceivedData).toString();
-        expect(clientReceivedStr).toContain(testMessage);
+        expect(clientReceivedStr).toContain(msg1);
+        expect(clientReceivedStr).toContain(msg2);
 
         playerClient.end();
     });
