@@ -80,8 +80,25 @@ export class BridgeServer {
                         }
 
                         if (msg.startsWith('DATA ')) {
+                            // Handle coalesced packets: "DATA <connId>\n<MinecraftData>"
+                            const newlineIndex = data.indexOf(10); // 0x0A is \n
+
+                            let commandLine: string;
+                            let payload: Uint8Array | null = null;
+
+                            if (newlineIndex !== -1) {
+                                commandLine = new TextDecoder().decode(data.subarray(0, newlineIndex));
+                                if (data.length > newlineIndex + 1) {
+                                    payload = data.subarray(newlineIndex + 1);
+                                }
+                            } else {
+                                commandLine = msg;
+                            }
+
                             // DATA <connId>
-                            const connId = msg.trim().split(' ')[1];
+                            const parts = commandLine.trim().split(' ');
+                            const connId = parts[1];
+
                             this.log(`Detected: AGENT DATA channel for ${connId}`);
                             state.type = 'AGENT_DATA';
 
@@ -94,7 +111,13 @@ export class BridgeServer {
                                 playerSocket.data.target = socket;
                                 playerSocket.data.type = 'PLAYER'; // Confirm the other was player
 
-                                // Flush player buffer if data was waiting
+                                // 1. Forward any trailing payload from Agent to Player
+                                if (payload && payload.length > 0) {
+                                    this.log(`Forwarding ${payload.length} bytes of coalesced data to player`);
+                                    playerSocket.write(payload);
+                                }
+
+                                // 2. Flush player buffer (Handshake/Login) to Agent
                                 const playerBuffer = playerSocket.data.buffer;
                                 if (playerBuffer.length > 0) {
                                     this.log(`Flushing ${playerBuffer.length} buffered packets for ${connId}`);
