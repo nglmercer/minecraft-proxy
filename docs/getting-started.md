@@ -31,9 +31,9 @@ The easiest way to use this project is to run the built-in proxy script.
 
 1.  **Configure**: Create a `.env` file (optional) or use environment variables.
     ```env
-    LISTEN_PORT=25565
-    BACKEND_HOST=localhost
-    BACKEND_PORT=25566
+    PROXY_PORT=25566
+    MINECRAFT_HOST=localhost
+    MINECRAFT_PORT=25565
     DEBUG=true
     ```
 2.  **Run**:
@@ -48,11 +48,11 @@ You can import `startProxy` to use it within your own TypeScript application.
 ```typescript
 import { startProxy } from 'minecraft-tcp-proxy';
 
-// Start a proxy on port 25566 that forwards to a backend on localhost:25565
+// Start a proxy on port 25566 that forwards to a Minecraft server on localhost:25565
 const server = await startProxy({
-  listenPort: 25566,
-  backendHost: 'localhost',
-  backendPort: 25565,
+  proxyPort: 25566,
+  minecraftHost: 'localhost',
+  minecraftPort: 25565,
   debug: true,
 });
 

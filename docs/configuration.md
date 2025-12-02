@@ -16,9 +16,9 @@ Create a `.env` file in the root directory or next to your executable.
 
 | Variable | Default | Description |
 | :--- | :--- | :--- |
-| `LISTEN_PORT` | `25565` | Port to listen on for incoming connections. |
-| `BACKEND_HOST` | `localhost` | Hostname/IP of the target Minecraft server. |
-| `BACKEND_PORT` | `25566` | Port of the target Minecraft server. |
+| `PROXY_PORT` | `25566` | Port where the proxy listens for Minecraft client connections. |
+| `MINECRAFT_HOST` | `localhost` | Hostname/IP of the actual Minecraft server. |
+| `MINECRAFT_PORT` | `25565` | Port of the actual Minecraft server. |
 
 ### Bridge Server (VPS)
 
@@ -44,9 +44,13 @@ When using the library programmatically, use the `ProxyConfig` interface:
 
 ```typescript
 interface ProxyConfig {
-  listenPort: number;
-  backendHost: string;
-  backendPort: number;
+  /** Port where the proxy listens for incoming Minecraft client connections */
+  proxyPort: number;
+  /** Hostname of the actual Minecraft server */
+  minecraftHost: string;
+  /** Port of the actual Minecraft server */
+  minecraftPort: number;
+  /** Enable debug logging */
   debug: boolean;
 }
 ```

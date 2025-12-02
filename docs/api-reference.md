@@ -14,7 +14,7 @@ Starts the TCP proxy server.
 ```typescript
 import { startProxy } from 'minecraft-tcp-proxy';
 
-const server = await startProxy({ listenPort: 25566, backendPort: 25565 });
+const server = await startProxy({ proxyPort: 25566, minecraftPort: 25565 });
 ```
 
 ## Classes
