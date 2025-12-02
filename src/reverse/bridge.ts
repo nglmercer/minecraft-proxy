@@ -1,7 +1,7 @@
 import type { Socket } from 'bun';
 
 export interface BridgeConfig {
-    port: number; // Single port for both Agent and Players
+    port: number;
     secret: string;
     debug?: boolean;
 }
@@ -18,7 +18,7 @@ interface SocketData {
     type: SocketType;
     authenticated?: boolean;
     target?: Socket;
-    buffer: Uint8Array[]; // Buffer vital to not lose the first player packet
+    buffer: Uint8Array[]; // Buffer for accumulating chunks
 }
 
 export class BridgeServer {
@@ -38,25 +38,22 @@ export class BridgeServer {
             port: this.config.port,
             socket: {
                 open: (socket) => {
-                    // On open, we don't know who it is. Wait for first packet.
                     socket.data = { type: 'UNKNOWN', buffer: [] };
                 },
                 data: (socket, data) => {
                     const state = socket.data;
 
-                    // 1. If we already know who it is, act normally
+                    // 1. Fast Path: Tunnel Established
                     if (state.type === 'AGENT_DATA') {
                         state.target?.write(data);
                         return;
                     }
 
                     if (state.type === 'PLAYER') {
-                        // If tunnel is ready, forward
                         if (state.target) {
                             state.target.write(data);
                         } else {
-                            // Tunnel not ready yet, buffer this packet too!
-                            // Important: Copy the data to ensure it persists safely
+                            // Buffer until tunnel is ready. Copy data!
                             state.buffer.push(new Uint8Array(data));
                         }
                         return;
@@ -67,92 +64,55 @@ export class BridgeServer {
                         return;
                     }
 
-                    // 2. If UNKNOWN, analyze the first packet (Sniffing)
+                    // 2. Sniffing / Handshake Phase
                     if (state.type === 'UNKNOWN') {
-                        const msg = data.toString();
-
-                        // -- AGENT DETECTION (Text Protocol) --
-                        if (msg.startsWith('AUTH ')) {
-                            this.log('Detected: AGENT CONTROL requesting handshake');
-                            state.type = 'AGENT_CONTROL';
-                            this.handleControlMessage(socket, data); // Process the AUTH
-                            return;
-                        }
-
-                        if (msg.startsWith('DATA ')) {
-                            // Handle coalesced packets: "DATA <connId>\n<MinecraftData>"
-                            const newlineIndex = data.indexOf(10); // 0x0A is \n
-
-                            let commandLine: string;
-                            let payload: Uint8Array | null = null;
-
-                            if (newlineIndex !== -1) {
-                                commandLine = new TextDecoder().decode(data.subarray(0, newlineIndex));
-                                if (data.length > newlineIndex + 1) {
-                                    payload = data.subarray(newlineIndex + 1);
-                                }
-                            } else {
-                                commandLine = msg;
-                            }
-
-                            // DATA <connId>
-                            const parts = commandLine.trim().split(' ');
-                            const connId = parts[1];
-
-                            this.log(`Detected: AGENT DATA channel for ${connId}`);
-                            state.type = 'AGENT_DATA';
-
-                            if (connId && this.pendingPlayers.has(connId)) {
-                                const playerSocket = this.pendingPlayers.get(connId)!;
-                                this.pendingPlayers.delete(connId);
-
-                                // Link Player <-> AgentData
-                                state.target = playerSocket;
-                                playerSocket.data.target = socket;
-                                playerSocket.data.type = 'PLAYER'; // Confirm the other was player
-
-                                // 1. Forward any trailing payload from Agent to Player
-                                if (payload && payload.length > 0) {
-                                    this.log(`Forwarding ${payload.length} bytes of coalesced data to player`);
-                                    playerSocket.write(payload);
-                                }
-
-                                // 2. Flush player buffer (Handshake/Login) to Agent
-                                const playerBuffer = playerSocket.data.buffer;
-                                if (playerBuffer.length > 0) {
-                                    this.log(`Flushing ${playerBuffer.length} buffered packets for ${connId}`);
-                                    for (const chunk of playerBuffer) {
-                                        socket.write(chunk);
-                                    }
-                                    playerSocket.data.buffer = [];
-                                }
-
-                                this.log(`Tunnel established for ${connId}`);
-                            } else {
-                                this.log(`Invalid connId or player gone: ${connId}`);
-                                socket.end();
-                            }
-                            return;
-                        }
-
-                        // -- PLAYER DETECTION (Anything else) --
-                        // If not AUTH nor DATA, assume it's Minecraft.
-                        this.log(`Detected: MINECRAFT PLAYER (${socket.remoteAddress})`);
-                        state.type = 'PLAYER';
-
-                        // Save this first packet in buffer because tunnel isn't ready
+                        // Accumulate data to handle split packets
                         state.buffer.push(new Uint8Array(data));
 
-                        if (!this.controlSocket) {
-                            this.log('No agent connected. Dropping player.');
-                            socket.end();
+                        // Check combined buffer
+                        const combined = Buffer.concat(state.buffer);
+
+                        // Heuristic: Check for Agent Protocol Prefixes
+                        // "DATA " or "AUTH "
+                        // If the buffer is short, we might need to wait
+                        if (combined.length < 5) {
+                            const partial = combined.toString('utf8');
+                            if ("DATA ".startsWith(partial) || "AUTH ".startsWith(partial)) {
+                                return; // Wait for more data
+                            }
+                            // Doesn't match prefix, assume Player
+                            this.convertToPlayer(socket, combined);
                             return;
                         }
 
-                        // Generate ID and ask Agent for tunnel
-                        const connId = Math.random().toString(36).substring(7);
-                        this.pendingPlayers.set(connId, socket);
-                        this.controlSocket.write(`CONNECT ${connId}\n`);
+                        const prefix = combined.subarray(0, 5).toString('utf8');
+
+                        if (prefix === 'DATA ' || prefix === 'AUTH ') {
+                            // It is Agent Protocol. Wait for newline.
+                            const newlineIndex = combined.indexOf(10); // \n
+                            if (newlineIndex === -1) {
+                                return; // Wait for full command line
+                            }
+
+                            // We have a full command line
+                            const commandLine = combined.subarray(0, newlineIndex).toString('utf8').trim();
+                            const payload = combined.subarray(newlineIndex + 1); // Remaining bytes
+
+                            // Clear buffer (we consumed it)
+                            state.buffer = [];
+
+                            if (commandLine.startsWith('AUTH ')) {
+                                state.type = 'AGENT_CONTROL';
+                                this.processAuth(socket, commandLine);
+                                // If there was payload after AUTH (unlikely), we ignore or handle it?
+                                // AUTH shouldn't have payload.
+                            } else if (commandLine.startsWith('DATA ')) {
+                                this.processDataHandshake(socket, commandLine, payload);
+                            }
+                        } else {
+                            // Not Agent Protocol -> Player
+                            this.convertToPlayer(socket, combined);
+                        }
                     }
                 },
                 close: (socket) => {
@@ -172,21 +132,79 @@ export class BridgeServer {
         });
     }
 
-    private handleControlMessage(socket: Socket<any>, data: Uint8Array) {
-        const msg = data.toString();
-        // Authentication logic
-        if (msg.startsWith('AUTH ')) {
-            const secret = msg.trim().split(' ')[1];
-            if (secret === this.config.secret) {
-                socket.data.authenticated = true;
-                this.controlSocket = socket;
-                this.log('Agent authenticated successfully');
-                socket.write('AUTH_OK\n');
-            } else {
-                socket.write('AUTH_FAIL\n');
-                socket.end();
-            }
+    private convertToPlayer(socket: Socket<any>, initialData: Buffer) {
+        this.log(`Detected: MINECRAFT PLAYER (${socket.remoteAddress})`);
+        socket.data.type = 'PLAYER';
+        // Keep the data in the buffer, it will be flushed when tunnel opens
+        // But wait, we concatenated it for checking. We need to put it back in state.buffer?
+        // Actually, state.buffer is Array<Uint8Array>.
+        // If we called Buffer.concat, we created a new buffer.
+        // Let's just reset state.buffer to contain this single combined chunk to avoid complexity.
+        socket.data.buffer = [initialData];
+
+        if (!this.controlSocket) {
+            this.log('No agent connected. Dropping player.');
+            socket.end();
+            return;
         }
+
+        const connId = Math.random().toString(36).substring(7);
+        this.pendingPlayers.set(connId, socket);
+        this.controlSocket.write(`CONNECT ${connId}\n`);
+    }
+
+    private processAuth(socket: Socket<any>, commandLine: string) {
+        const secret = commandLine.split(' ')[1];
+        if (secret === this.config.secret) {
+            socket.data.authenticated = true;
+            this.controlSocket = socket;
+            this.log('Agent authenticated successfully');
+            socket.write('AUTH_OK\n');
+        } else {
+            socket.write('AUTH_FAIL\n');
+            socket.end();
+        }
+    }
+
+    private processDataHandshake(socket: Socket<any>, commandLine: string, payload: Uint8Array) {
+        const connId = commandLine.split(' ')[1];
+        this.log(`Detected: AGENT DATA channel for ${connId}`);
+        socket.data.type = 'AGENT_DATA';
+
+        if (connId && this.pendingPlayers.has(connId)) {
+            const playerSocket = this.pendingPlayers.get(connId)!;
+            this.pendingPlayers.delete(connId);
+
+            // Link
+            socket.data.target = playerSocket;
+            playerSocket.data.target = socket;
+            playerSocket.data.type = 'PLAYER';
+
+            // 1. Forward Payload (Agent -> Player)
+            if (payload.length > 0) {
+                this.log(`Forwarding ${payload.length} bytes of coalesced data to player`);
+                playerSocket.write(payload);
+            }
+
+            // 2. Flush Player Buffer (Player -> Agent)
+            const playerBuffer = playerSocket.data.buffer;
+            if (playerBuffer.length > 0) {
+                this.log(`Flushing ${playerBuffer.length} buffered packets for ${connId}`);
+                for (const chunk of playerBuffer) {
+                    socket.write(chunk);
+                }
+                playerSocket.data.buffer = [];
+            }
+
+            this.log(`Tunnel established for ${connId}`);
+        } else {
+            this.log(`Invalid connId or player gone: ${connId}`);
+            socket.end();
+        }
+    }
+
+    private handleControlMessage(socket: Socket<any>, data: Uint8Array) {
+        // Only for subsequent control messages if any (currently none)
     }
 
     private log(msg: string) {
