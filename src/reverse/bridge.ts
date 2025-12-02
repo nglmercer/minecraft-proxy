@@ -96,7 +96,8 @@ export class BridgeServer {
 
                             // We have a full command line
                             const commandLine = combined.subarray(0, newlineIndex).toString('utf8').trim();
-                            const payload = combined.subarray(newlineIndex + 1); // Remaining bytes
+                            // Use slice() to create a copy of the payload, ensuring it persists after buffer clear
+                            const payload = combined.subarray(newlineIndex + 1).slice();
 
                             // Clear buffer (we consumed it)
                             state.buffer = [];

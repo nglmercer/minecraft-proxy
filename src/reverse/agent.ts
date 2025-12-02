@@ -14,6 +14,11 @@ export interface AgentConfig {
     debug?: boolean;
 }
 
+interface LocalSocketData {
+    target?: Socket<any>;
+    buffer: Uint8Array[];
+}
+
 export const defaultAgentConfig: AgentConfig = {
     bridgeHost: 'localhost',
     bridgeControlPort: 8080,
@@ -98,13 +103,15 @@ export class TunnelAgent {
         this.log(`Opening tunnel for connection ${connId}...`);
 
         // 1. Connect to Local Minecraft Server
-        Bun.connect<{ target: Socket }>({
+        Bun.connect<LocalSocketData>({
             hostname: this.config.localHost,
             port: this.config.localPort,
             socket: {
                 open: (localSocket) => {
+                    localSocket.data = { buffer: [] };
+
                     // 2. Connect to Bridge (Data Channel)
-                    Bun.connect<{ target: Socket }>({
+                    Bun.connect<{ target: Socket<any> }>({
                         hostname: this.config.bridgeHost,
                         port: this.config.bridgeControlPort,
                         socket: {
@@ -115,10 +122,18 @@ export class TunnelAgent {
                                 // Pipe: Local <-> Bridge
 
                                 // Local -> Bridge
-                                localSocket.data = { target: bridgeDataSocket as any };
+                                localSocket.data.target = bridgeDataSocket;
+
+                                // Flush buffer as a single chunk to ensure atomicity
+                                if (localSocket.data.buffer.length > 0) {
+                                    const combined = Buffer.concat(localSocket.data.buffer);
+                                    this.log(`Flushing ${combined.length} bytes of buffered data to bridge`);
+                                    bridgeDataSocket.write(combined);
+                                    localSocket.data.buffer = [];
+                                }
 
                                 // Bridge -> Local
-                                bridgeDataSocket.data = { target: localSocket as any };
+                                bridgeDataSocket.data = { target: localSocket };
                             },
                             data: (bridgeDataSocket, data) => {
                                 const target = (bridgeDataSocket.data as any)?.target as Socket;
@@ -139,16 +154,25 @@ export class TunnelAgent {
                     });
                 },
                 data: (localSocket, data) => {
-                    const target = (localSocket.data as any)?.target as Socket;
-                    if (target) target.write(data);
+                    const state = localSocket.data;
+                    if (state.target) {
+                        state.target.write(data);
+                    } else {
+                        // Buffer data if bridge connection isn't ready yet
+                        state.buffer.push(new Uint8Array(data));
+                    }
                 },
                 close: (localSocket) => {
-                    const target = (localSocket.data as any)?.target as Socket;
-                    if (target) target.end();
+                    const state = localSocket.data;
+                    if (state?.target) {
+                        state.target.end();
+                    }
                 },
                 error: (localSocket) => {
-                    const target = (localSocket.data as any)?.target as Socket;
-                    if (target) target.end();
+                    const state = localSocket.data;
+                    if (state?.target) {
+                        state.target.end();
+                    }
                 }
             }
         }).catch(err => {
