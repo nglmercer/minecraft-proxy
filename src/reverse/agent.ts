@@ -14,6 +14,15 @@ export interface AgentConfig {
     debug?: boolean;
 }
 
+export const defaultAgentConfig: AgentConfig = {
+    bridgeHost: 'localhost',
+    bridgeControlPort: 8080,
+    localHost: 'localhost',
+    localPort: 25565,
+    secret: 'default-secret',
+    debug: false
+};
+
 export class TunnelAgent {
     private config: AgentConfig;
     private controlSocket: Socket<any> | null = null;

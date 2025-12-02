@@ -7,6 +7,13 @@ export interface BridgeConfig {
     debug?: boolean;
 }
 
+export const defaultBridgeConfig: BridgeConfig = {
+    publicPort: 25565,
+    controlPort: 8080,
+    secret: 'default-secret',
+    debug: false
+};
+
 type SocketState =
     | { type: 'HANDSHAKE' }
     | { type: 'CONTROL'; authenticated: boolean }
