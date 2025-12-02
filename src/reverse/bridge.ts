@@ -72,32 +72,44 @@ export class BridgeServer {
                         // Check combined buffer
                         const combined = Buffer.concat(state.buffer);
 
+                        // Handle Proxy Protocol (Railway/Envoy etc)
+                        let dataOffset = 0;
+                        const proxyLen = this.getProxyHeaderLength(combined);
+
+                        if (proxyLen === 0) return; // Wait for full proxy header
+                        if (proxyLen > 0) {
+                            dataOffset = proxyLen;
+                        }
+
+                        const effectiveBuffer = combined.subarray(dataOffset);
+
                         // Heuristic: Check for Agent Protocol Prefixes
                         // "DATA " or "AUTH "
                         // If the buffer is short, we might need to wait
-                        if (combined.length < 5) {
-                            const partial = combined.toString('utf8');
+                        if (effectiveBuffer.length < 5) {
+                            const partial = effectiveBuffer.toString('utf8');
                             if ("DATA ".startsWith(partial) || "AUTH ".startsWith(partial)) {
                                 return; // Wait for more data
                             }
                             // Doesn't match prefix, assume Player
+                            // For Player, we keep the PROXY header so the server can see real IP (if configured)
                             this.convertToPlayer(socket, combined);
                             return;
                         }
 
-                        const prefix = combined.subarray(0, 5).toString('utf8');
+                        const prefix = effectiveBuffer.subarray(0, 5).toString('utf8');
 
                         if (prefix === 'DATA ' || prefix === 'AUTH ') {
                             // It is Agent Protocol. Wait for newline.
-                            const newlineIndex = combined.indexOf(10); // \n
+                            const newlineIndex = effectiveBuffer.indexOf(10); // \n
                             if (newlineIndex === -1) {
                                 return; // Wait for full command line
                             }
 
                             // We have a full command line
-                            const commandLine = combined.subarray(0, newlineIndex).toString('utf8').trim();
+                            const commandLine = effectiveBuffer.subarray(0, newlineIndex).toString('utf8').trim();
                             // Use slice() to create a copy of the payload, ensuring it persists after buffer clear
-                            const payload = combined.subarray(newlineIndex + 1).slice();
+                            const payload = effectiveBuffer.subarray(newlineIndex + 1).slice();
 
                             // Clear buffer (we consumed it)
                             state.buffer = [];
@@ -105,8 +117,6 @@ export class BridgeServer {
                             if (commandLine.startsWith('AUTH ')) {
                                 state.type = 'AGENT_CONTROL';
                                 this.processAuth(socket, commandLine);
-                                // If there was payload after AUTH (unlikely), we ignore or handle it?
-                                // AUTH shouldn't have payload.
                             } else if (commandLine.startsWith('DATA ')) {
                                 this.processDataHandshake(socket, commandLine, payload);
                             }
@@ -210,5 +220,25 @@ export class BridgeServer {
 
     private log(msg: string) {
         if (this.config.debug) console.log(`[Bridge] ${msg}`);
+    }
+
+    private getProxyHeaderLength(buffer: Buffer): number {
+        // v1: "PROXY "
+        if (buffer.length >= 6 && buffer.subarray(0, 6).toString('utf8') === 'PROXY ') {
+            const newline = buffer.indexOf(10); // \n
+            if (newline !== -1) return newline + 1;
+            return 0; // Incomplete
+        }
+
+        // v2: Sig
+        const v2Sig = Buffer.from([0x0D, 0x0A, 0x0D, 0x0A, 0x00, 0x0D, 0x0A, 0x51, 0x55, 0x49, 0x54, 0x0A]);
+        if (buffer.length >= 12 && buffer.subarray(0, 12).equals(v2Sig)) {
+            if (buffer.length < 16) return 0; // Incomplete header
+            const len = buffer.readUInt16BE(14);
+            if (buffer.length < 16 + len) return 0; // Incomplete payload
+            return 16 + len;
+        }
+
+        return -1; // Not a proxy header
     }
 }

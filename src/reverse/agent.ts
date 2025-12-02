@@ -116,20 +116,19 @@ export class TunnelAgent {
                         port: this.config.bridgeControlPort,
                         socket: {
                             open: (bridgeDataSocket) => {
-                                // Identify as Data Channel for connId
-                                bridgeDataSocket.write(`DATA ${connId}\n`);
-
-                                // Pipe: Local <-> Bridge
-
                                 // Local -> Bridge
                                 localSocket.data.target = bridgeDataSocket;
 
                                 // Flush buffer as a single chunk to ensure atomicity
+                                const header = Buffer.from(`DATA ${connId}\n`);
                                 if (localSocket.data.buffer.length > 0) {
-                                    const combined = Buffer.concat(localSocket.data.buffer);
-                                    this.log(`Flushing ${combined.length} bytes of buffered data to bridge`);
+                                    const payload = Buffer.concat(localSocket.data.buffer);
+                                    this.log(`Flushing ${payload.length} bytes of buffered data to bridge`);
+                                    const combined = Buffer.concat([header, payload]);
                                     bridgeDataSocket.write(combined);
                                     localSocket.data.buffer = [];
+                                } else {
+                                    bridgeDataSocket.write(header);
                                 }
 
                                 // Bridge -> Local
