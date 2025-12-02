@@ -9,6 +9,7 @@ A lightweight, high-performance TCP proxy and reverse tunnel library designed sp
 -   [**Configuration**](docs/configuration.md): Environment variables and options.
 -   [**Executables & Deployment**](docs/executables.md): Using standalone binaries and `.env` files.
 -   [**Reverse Tunneling**](docs/reverse-tunnel.md): Hosting a home server via a VPS.
+-   [**Development & Release**](docs/development.md): How to contribute and release new versions.
 -   [**API Reference**](docs/api-reference.md): For developers using the library.
 -   [**Troubleshooting**](docs/troubleshooting.md): Common issues and solutions.
 
