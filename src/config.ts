@@ -17,9 +17,9 @@ export interface ProxyConfig {
  * Default configuration.
  */
 export const defaultConfig: ProxyConfig = {
-  listenPort: 25565,
+  listenPort: 25566,
   backendHost: 'localhost',
-  backendPort: 25566,
+  backendPort: 25565,
   debug: false,
 };
 
