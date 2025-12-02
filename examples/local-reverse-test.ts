@@ -1,15 +1,20 @@
 import { BridgeServer, TunnelAgent } from '../src/index.js';
 
-// --- CONFIGURATION ---
-const MINECRAFT_PORT = 25565; // Your running local Minecraft server
-const VPS_PUBLIC_PORT = 25567; // Players will connect here (simulated VPS port)
-const VPS_CONTROL_PORT = 8080; // Internal control port
-const SECRET = 'local-test-secret';
+// --- CONFIGURACIÓN ---
+// Tu servidor de Minecraft REAL en tu PC
+const MINECRAFT_PORT = 25565;
 
-console.log('--- STARTING LOCAL REVERSE TUNNEL TEST ---');
+// Puertos simulados para el VPS (Bridge)
+const VPS_PUBLIC_PORT = 25567; // Los jugadores entrarán por aquí (localhost:25567)
+const VPS_CONTROL_PORT = 8080; // Puerto interno de comunicación
+const SECRET = 'test-secret';
 
-// 1. Start the Bridge (Simulating the VPS)
-console.log('[1/2] Starting Simulated VPS Bridge...');
+console.log('--- INICIANDO PRUEBA DE TÚNEL INVERSO (LOCAL) ---');
+
+// 1. Iniciar el "VPS" (Bridge)
+// Esto normalmente correría en tu servidor en la nube.
+console.log(`[VPS] Iniciando Bridge...`);
+console.log(`[VPS] Jugadores conectarán a: localhost:${VPS_PUBLIC_PORT}`);
 const bridge = new BridgeServer({
     publicPort: VPS_PUBLIC_PORT,
     controlPort: VPS_CONTROL_PORT,
@@ -18,18 +23,20 @@ const bridge = new BridgeServer({
 });
 bridge.start();
 
-// 2. Start the Agent (Simulating your Home PC)
-console.log('[2/2] Starting Home Agent...');
+// 2. Iniciar el "Agente" (Casa)
+// Esto corre en tu PC junto a tu Minecraft.
+console.log(`[CASA] Iniciando Agente...`);
+console.log(`[CASA] Conectando al VPS y redirigiendo a Minecraft :${MINECRAFT_PORT}`);
 const agent = new TunnelAgent({
-    bridgeHost: 'localhost', // Connecting to the "VPS" on localhost
+    bridgeHost: 'localhost', // En la vida real, aquí iría la IP de tu VPS (ej. 1.2.3.4)
     bridgeControlPort: VPS_CONTROL_PORT,
     localHost: 'localhost',
-    localPort: MINECRAFT_PORT, // Forwarding to your real Minecraft
+    localPort: MINECRAFT_PORT,
     secret: SECRET,
     debug: true,
 });
 agent.start();
 
-console.log('\n--- READY ---');
-console.log(`Connect your Minecraft Client to: localhost:${VPS_PUBLIC_PORT}`);
-console.log(`Traffic will flow: Client -> Bridge(:${VPS_PUBLIC_PORT}) -> Agent -> Minecraft(:${MINECRAFT_PORT})`);
+console.log('\n--- SISTEMA LISTO ---');
+console.log(`PRUEBA: Abre Minecraft y conéctate a 'localhost:${VPS_PUBLIC_PORT}'`);
+console.log(`El tráfico viajará: Cliente -> VPS Falso -> Agente -> Tu Minecraft`);

@@ -17,7 +17,20 @@ graph LR
 
 ## Setup
 
-### 1. On your VPS (Public Server)
+### Option 1: Using Executables (Recommended)
+
+The easiest way to set up a reverse tunnel is using the standalone executables.
+
+1.  **VPS**: Run `bridge-server` with a `.env` file.
+2.  **Home**: Run `tunnel-agent` with a `.env` file.
+
+See [Executables & Deployment](executables.md) for detailed instructions.
+
+### Option 2: Using as a Library
+
+If you want to integrate this into a larger application, you can use the TypeScript API.
+
+#### 1. On your VPS (Public Server)
 
 Run the Bridge Server. This will listen for players and for your home agent.
 
@@ -40,7 +53,7 @@ Run it:
 bun run vps-bridge.ts
 ```
 
-### 2. At Home (Private Server)
+#### 2. At Home (Private Server)
 
 Run the Agent. This connects to your VPS and your local Minecraft server.
 

@@ -1,0 +1,66 @@
+# Getting Started
+
+## Prerequisites
+
+- **Bun**: This project is built with [Bun](https://bun.sh/). You need Bun v1.0 or later installed.
+  ```bash
+  curl -fsSL https://bun.sh/install | bash
+  ```
+
+## Installation
+
+You can install the library into your existing project:
+
+```bash
+bun add minecraft-tcp-proxy
+```
+
+Or clone the repository to run it standalone:
+
+```bash
+git clone https://github.com/yourusername/minecraft-tcp-proxy.git
+cd minecraft-tcp-proxy
+bun install
+```
+
+## Basic Usage
+
+### Running as a Standalone Proxy
+
+The easiest way to use this project is to run the built-in proxy script.
+
+1.  **Configure**: Create a `.env` file (optional) or use environment variables.
+    ```env
+    LISTEN_PORT=25565
+    BACKEND_HOST=localhost
+    BACKEND_PORT=25566
+    DEBUG=true
+    ```
+2.  **Run**:
+    ```bash
+    bun start
+    ```
+
+### Using as a Library
+
+You can import `startProxy` to use it within your own TypeScript application.
+
+```typescript
+import { startProxy } from 'minecraft-tcp-proxy';
+
+// Start a proxy on port 25565 that forwards to a backend on localhost:25575
+const server = await startProxy({
+  listenPort: 25565,
+  backendHost: 'localhost',
+  backendPort: 25575,
+  debug: true,
+});
+
+console.log('Proxy running!');
+```
+
+## Next Steps
+
+- Learn about the [Architecture](architecture.md).
+- Configure [Reverse Tunneling](reverse-tunnel.md) for hosting behind a firewall.
+- Use [Standalone Executables](executables.md) for deployment without installing Bun.

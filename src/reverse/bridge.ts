@@ -111,6 +111,7 @@ export class BridgeServer {
             socket: {
                 open: (playerSocket) => {
                     this.log(`Player connected: ${playerSocket.remoteAddress}`);
+                    playerSocket.data = {} as any;
 
                     if (!this.controlSocket) {
                         this.log('No agent connected. Dropping player.');
