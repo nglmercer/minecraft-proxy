@@ -44,35 +44,51 @@ export class TunnelAgent {
     private connectControl() {
         this.log(`Connecting to Bridge Control at ${this.config.bridgeHost}:${this.config.bridgeControlPort}...`);
 
-        Bun.connect({
+        Bun.connect<{ buffer: string }>({
             hostname: this.config.bridgeHost,
             port: this.config.bridgeControlPort,
             socket: {
                 open: (socket) => {
+                    socket.data = { buffer: '' };
                     this.log('Connected to Bridge. Authenticating...');
                     socket.write(`AUTH ${this.config.secret}\n`);
                 },
                 data: (socket, data) => {
-                    const msg = data.toString().trim();
-
-                    if (msg === 'AUTH_OK') {
-                        this.log('Authenticated successfully. Waiting for connections...');
-                        this.controlSocket = socket;
-                        return;
+                    const chunk = data.toString();
+                    // Initialize buffer if not present (should be set in open, but just in case)
+                    if (!socket.data || typeof socket.data.buffer !== 'string') {
+                        socket.data = { buffer: '' };
                     }
 
-                    if (msg === 'AUTH_FAIL') {
-                        this.log('Authentication failed. Check secret.');
-                        socket.end();
-                        return;
-                    }
+                    socket.data.buffer += chunk;
 
-                    if (msg.startsWith('CONNECT ')) {
-                        const connId = msg.split(' ')[1];
-                        if (connId) {
-                            this.handleConnectRequest(connId);
+                    const lines = socket.data.buffer.split('\n');
+                    // Process all complete lines
+                    while (lines.length > 1) {
+                        const msg = lines.shift()!.trim();
+                        if (!msg) continue;
+
+                        if (msg === 'AUTH_OK') {
+                            this.log('Authenticated successfully. Waiting for connections...');
+                            this.controlSocket = socket;
+                            continue;
+                        }
+
+                        if (msg === 'AUTH_FAIL') {
+                            this.log('Authentication failed. Check secret.');
+                            socket.end();
+                            return;
+                        }
+
+                        if (msg.startsWith('CONNECT ')) {
+                            const connId = msg.split(' ')[1];
+                            if (connId) {
+                                this.handleConnectRequest(connId);
+                            }
                         }
                     }
+                    // Keep the last partial line
+                    socket.data.buffer = lines[0] ?? '';
                 },
                 close: () => {
                     this.log('Bridge connection closed. Reconnecting in 5s...');

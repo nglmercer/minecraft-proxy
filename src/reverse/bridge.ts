@@ -86,11 +86,24 @@ export class BridgeServer {
                         // Heuristic: Check for Agent Protocol Prefixes
                         // "DATA " or "AUTH "
                         // If the buffer is short, we might need to wait
-                        if (effectiveBuffer.length < 5) {
+                        // Heuristic: Check for Agent Protocol Prefixes
+                        // "DATA " or "AUTH "
+                        // Also check for "PROXY " to avoid misclassifying fragmented proxy headers
+                        if (effectiveBuffer.length < 6) {
                             const partial = effectiveBuffer.toString('utf8');
-                            if ("DATA ".startsWith(partial) || "AUTH ".startsWith(partial)) {
+                            if ("DATA ".startsWith(partial) ||
+                                "AUTH ".startsWith(partial) ||
+                                "PROXY ".startsWith(partial)) {
                                 return; // Wait for more data
                             }
+
+                            // Check for v2 Proxy Signature (partial)
+                            // Sig: 0D 0A 0D 0A 00 0D 0A 51 55 49 54 0A
+                            const v2Sig = Buffer.from([0x0D, 0x0A, 0x0D, 0x0A, 0x00, 0x0D, 0x0A, 0x51, 0x55, 0x49, 0x54, 0x0A]);
+                            if (effectiveBuffer.length > 0 && v2Sig.subarray(0, effectiveBuffer.length).equals(effectiveBuffer)) {
+                                return; // Wait for more data
+                            }
+
                             // Doesn't match prefix, assume Player
                             // For Player, we keep the PROXY header so the server can see real IP (if configured)
                             this.convertToPlayer(socket, combined);
