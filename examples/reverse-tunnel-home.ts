@@ -1,12 +1,12 @@
 import { TunnelAgent } from '../src/index.js';
 
 // Configuration
-const VPS_HOST = 'localhost'; // Change this to your VPS IP (e.g., '1.2.3.4')
-const VPS_CONTROL_PORT = 8080;
+const VPS_HOST = 'caboose.proxy.rlwy.net'; // Change this to your VPS IP (e.g., '1.2.3.4')
+const VPS_CONTROL_PORT = 54119;
 const LOCAL_MC_HOST = 'localhost';
 const LOCAL_MC_PORT = 25565;
 const SECRET = 'my-super-secret-token';
-
+//caboose.proxy.rlwy.net:54119 --->25565
 console.log('Starting Home Tunnel Agent...');
 
 const agent = new TunnelAgent({

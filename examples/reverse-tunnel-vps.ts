@@ -1,15 +1,14 @@
 import { BridgeServer } from '../src/index.js';
 
 // Configuration
-const PUBLIC_PORT = 25565; // Players connect here
-const CONTROL_PORT = 8080; // Home Agent connects here
+const PORT = Number(process.env.PORT) || 54119; // Single port for everything
 const SECRET = 'my-super-secret-token';
+//caboose.proxy.rlwy.net:54119 ---> Multiplexed
 
-console.log('Starting VPS Bridge Server...');
+console.log('Starting VPS Bridge Server (Multiplexed)...');
 
 const bridge = new BridgeServer({
-    publicPort: PUBLIC_PORT,
-    controlPort: CONTROL_PORT,
+    port: PORT,
     secret: SECRET,
     debug: true,
 });
@@ -17,4 +16,4 @@ const bridge = new BridgeServer({
 bridge.start();
 
 console.log('Bridge is ready.');
-console.log(`Players should connect to this VPS IP on port ${PUBLIC_PORT}`);
+console.log(`Agent AND Players should connect to this VPS IP on port ${PORT}`);

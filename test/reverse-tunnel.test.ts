@@ -7,8 +7,7 @@ import type { Socket } from 'bun';
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe('Reverse Tunnel (Bridge + Agent)', () => {
-    const BRIDGE_CONTROL_PORT = 30005;
-    const BRIDGE_PUBLIC_PORT = 30006;
+    const BRIDGE_PORT = 30005; // Single port for both
     const LOCAL_MC_PORT = 30007;
     const SECRET = 'test-secret';
 
@@ -40,8 +39,7 @@ describe('Reverse Tunnel (Bridge + Agent)', () => {
 
         // 2. Start Bridge Server
         bridge = new BridgeServer({
-            publicPort: BRIDGE_PUBLIC_PORT,
-            controlPort: BRIDGE_CONTROL_PORT,
+            port: BRIDGE_PORT,
             secret: SECRET,
             debug: false, // Set to true for debugging
         });
@@ -50,7 +48,7 @@ describe('Reverse Tunnel (Bridge + Agent)', () => {
         // 3. Start Tunnel Agent
         agent = new TunnelAgent({
             bridgeHost: 'localhost',
-            bridgeControlPort: BRIDGE_CONTROL_PORT,
+            bridgeControlPort: BRIDGE_PORT,
             localHost: 'localhost',
             localPort: LOCAL_MC_PORT,
             secret: SECRET,
@@ -73,10 +71,10 @@ describe('Reverse Tunnel (Bridge + Agent)', () => {
         localServerReceivedData = [];
         const clientReceivedData: Buffer[] = [];
 
-        // 4. Simulate a Player connecting to the Public Port
+        // 4. Simulate a Player connecting to the Public Port (Same as Control Port now)
         const playerClient = await Bun.connect({
             hostname: 'localhost',
-            port: BRIDGE_PUBLIC_PORT,
+            port: BRIDGE_PORT,
             socket: {
                 data: (socket, data) => {
                     clientReceivedData.push(Buffer.from(data));
@@ -112,7 +110,7 @@ describe('Reverse Tunnel (Bridge + Agent)', () => {
         // Create a separate agent with wrong secret
         const badAgent = new TunnelAgent({
             bridgeHost: 'localhost',
-            bridgeControlPort: BRIDGE_CONTROL_PORT, // Connect to same bridge
+            bridgeControlPort: BRIDGE_PORT, // Connect to same bridge
             localHost: 'localhost',
             localPort: LOCAL_MC_PORT,
             secret: 'wrong-secret',

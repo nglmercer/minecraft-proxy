@@ -1,23 +1,25 @@
 import type { Socket } from 'bun';
 
 export interface BridgeConfig {
-    publicPort: number;
-    controlPort: number;
+    port: number; // Single port for both Agent and Players
     secret: string;
     debug?: boolean;
 }
 
 export const defaultBridgeConfig: BridgeConfig = {
-    publicPort: 25565,
-    controlPort: 8080,
+    port: 8080,
     secret: 'default-secret',
     debug: false
 };
 
-type SocketState =
-    | { type: 'HANDSHAKE' }
-    | { type: 'CONTROL'; authenticated: boolean }
-    | { type: 'DATA'; target: Socket };
+type SocketType = 'UNKNOWN' | 'AGENT_CONTROL' | 'AGENT_DATA' | 'PLAYER';
+
+interface SocketData {
+    type: SocketType;
+    authenticated?: boolean;
+    target?: Socket;
+    buffer: Uint8Array[]; // Buffer vital to not lose the first player packet
+}
 
 export class BridgeServer {
     private config: BridgeConfig;
@@ -29,140 +31,133 @@ export class BridgeServer {
     }
 
     start() {
-        // 1. Control & Data Server (Agent connects here)
-        Bun.listen<{ type: string; authenticated?: boolean; target?: Socket }>({
+        this.log(`Starting Bridge on port ${this.config.port} (MULTIPLEXED MODE)...`);
+
+        Bun.listen<SocketData>({
             hostname: '0.0.0.0',
-            port: this.config.controlPort,
+            port: this.config.port,
             socket: {
                 open: (socket) => {
-                    socket.data = { type: 'HANDSHAKE' };
+                    // On open, we don't know who it is. Wait for first packet.
+                    socket.data = { type: 'UNKNOWN', buffer: [] };
                 },
                 data: (socket, data) => {
-                    const state = socket.data as SocketState;
+                    const state = socket.data;
 
-                    // Case 1: Tunneling Data (Fast path)
-                    if (state.type === 'DATA') {
-                        state.target.write(data);
+                    // 1. If we already know who it is, act normally
+                    if (state.type === 'AGENT_DATA') {
+                        state.target?.write(data);
                         return;
                     }
 
-                    // Case 2: Handshake / Control
-                    const msg = data.toString(); // Don't trim blindly, binary data might look like whitespace
+                    if (state.type === 'PLAYER') {
+                        // If it's a player, send to agent socket (DATA channel)
+                        state.target?.write(data);
+                        return;
+                    }
 
-                    if (state.type === 'HANDSHAKE') {
+                    if (state.type === 'AGENT_CONTROL') {
+                        this.handleControlMessage(socket, data);
+                        return;
+                    }
+
+                    // 2. If UNKNOWN, analyze the first packet (Sniffing)
+                    if (state.type === 'UNKNOWN') {
+                        const msg = data.toString();
+
+                        // -- AGENT DETECTION (Text Protocol) --
                         if (msg.startsWith('AUTH ')) {
-                            const secret = msg.trim().split(' ')[1];
-                            if (secret === this.config.secret) {
-                                socket.data = { type: 'CONTROL', authenticated: true };
-                                this.controlSocket = socket;
-                                this.log('Agent authenticated (Control Channel)');
-                                socket.write('AUTH_OK\n');
-                            } else {
-                                socket.write('AUTH_FAIL\n');
-                                socket.end();
-                            }
+                            this.log('Detected: AGENT CONTROL requesting handshake');
+                            state.type = 'AGENT_CONTROL';
+                            this.handleControlMessage(socket, data); // Process the AUTH
                             return;
                         }
 
                         if (msg.startsWith('DATA ')) {
+                            // DATA <connId>
                             const connId = msg.trim().split(' ')[1];
+                            this.log(`Detected: AGENT DATA channel for ${connId}`);
+                            state.type = 'AGENT_DATA';
+
                             if (connId && this.pendingPlayers.has(connId)) {
                                 const playerSocket = this.pendingPlayers.get(connId)!;
                                 this.pendingPlayers.delete(connId);
 
-                                // Link them
-                                socket.data = { type: 'DATA', target: playerSocket };
+                                // Link Player <-> AgentData
+                                state.target = playerSocket;
+                                playerSocket.data.target = socket;
+                                playerSocket.data.type = 'PLAYER'; // Confirm the other was player
 
-                                // We also need to tell the Player Socket to forward to THIS socket
-                                const playerData = playerSocket.data as any || {};
-                                playerData.target = socket;
-                                playerSocket.data = playerData;
-
-                                // Flush buffer if any
-                                if (playerData.buffer && playerData.buffer.length > 0) {
-                                    for (const chunk of playerData.buffer) {
+                                // Flush player buffer if data was waiting
+                                const playerBuffer = playerSocket.data.buffer;
+                                if (playerBuffer.length > 0) {
+                                    for (const chunk of playerBuffer) {
                                         socket.write(chunk);
                                     }
-                                    playerData.buffer = [];
+                                    playerSocket.data.buffer = [];
                                 }
 
-                                this.log(`Tunnel linked for ${connId}`);
+                                this.log(`Tunnel established for ${connId}`);
                             } else {
-                                this.log(`Unknown connection ID: ${connId}`);
+                                this.log(`Invalid connId or player gone: ${connId}`);
                                 socket.end();
                             }
                             return;
                         }
+
+                        // -- PLAYER DETECTION (Anything else) --
+                        // If not AUTH nor DATA, assume it's Minecraft.
+                        this.log(`Detected: MINECRAFT PLAYER (${socket.remoteAddress})`);
+                        state.type = 'PLAYER';
+
+                        // Save this first packet in buffer because tunnel isn't ready
+                        state.buffer.push(data);
+
+                        if (!this.controlSocket) {
+                            this.log('No agent connected. Dropping player.');
+                            socket.end();
+                            return;
+                        }
+
+                        // Generate ID and ask Agent for tunnel
+                        const connId = Math.random().toString(36).substring(7);
+                        this.pendingPlayers.set(connId, socket);
+                        this.controlSocket.write(`CONNECT ${connId}\n`);
                     }
                 },
                 close: (socket) => {
-                    const state = socket.data as SocketState;
-                    if (state.type === 'CONTROL') {
-                        this.log('Agent Control Channel disconnected');
+                    const state = socket.data;
+                    if (state.type === 'AGENT_CONTROL') {
+                        this.log('Agent Control disconnected');
                         this.controlSocket = null;
                     }
-                    if (state.type === 'DATA') {
-                        state.target.end(); // Close the player connection too
+                    if (state.target) {
+                        state.target.end();
                     }
                 },
-                error: (socket, err) => {
-                    // Cleanup handled by close
+                error: (socket) => {
+                    socket.end();
                 }
             }
         });
+    }
 
-        // 2. Public Minecraft Server (Players connect here)
-        Bun.listen({
-            hostname: '0.0.0.0',
-            port: this.config.publicPort,
-            socket: {
-                open: (playerSocket) => {
-                    this.log(`Player connected: ${playerSocket.remoteAddress}`);
-                    playerSocket.data = {} as any;
-
-                    if (!this.controlSocket) {
-                        this.log('No agent connected. Dropping player.');
-                        playerSocket.end();
-                        return;
-                    }
-
-                    // Generate ID
-                    const connId = Math.random().toString(36).substring(7);
-                    this.pendingPlayers.set(connId, playerSocket);
-
-                    // Tell Agent to open a data connection
-                    this.controlSocket.write(`CONNECT ${connId}\n`);
-
-                    // We wait for the Agent to connect back to controlPort with "DATA <connId>"
-                    // The linking happens in the Control Server logic above.
-                },
-                data: (playerSocket, data) => {
-                    const target = (playerSocket.data as any)?.target as Socket;
-                    if (target) {
-                        target.write(data);
-                    } else {
-                        // Buffer? Or just drop for now (Handshake usually comes fast, but race condition possible)
-                        // In a robust app, we buffer. For "Lite", we hope the agent connects fast enough (usually <10ms on localhost, <50ms internet)
-                        // Minecraft client waits a bit before sending handshake? No, it sends immediately.
-                        // WE MUST BUFFER.
-                        const buffer = (playerSocket.data as any).buffer || [];
-                        buffer.push(data);
-                        (playerSocket.data as any).buffer = buffer;
-                    }
-                },
-                close: (playerSocket) => {
-                    const target = (playerSocket.data as any)?.target as Socket;
-                    if (target) target.end();
-                },
-                drain: (playerSocket) => {
-                    // Optional: handle backpressure
-                }
+    private handleControlMessage(socket: Socket<any>, data: Uint8Array) {
+        const msg = data.toString();
+        // Authentication logic
+        if (msg.startsWith('AUTH ')) {
+            const secret = msg.trim().split(' ')[1];
+            if (secret === this.config.secret) {
+                socket.data.authenticated = true;
+                this.controlSocket = socket;
+                this.log('Agent authenticated successfully');
+                socket.write('AUTH_OK\n');
+            } else {
+                socket.write('AUTH_FAIL\n');
+                socket.end();
             }
-        });
-
-        this.log(`Bridge Server running.`);
-        this.log(`- Public (Players): :${this.config.publicPort}`);
-        this.log(`- Control (Agent):  :${this.config.controlPort}`);
+        }
+        // ... other control logic if any ...
     }
 
     private log(msg: string) {
