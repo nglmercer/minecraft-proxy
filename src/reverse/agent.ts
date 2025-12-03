@@ -137,14 +137,13 @@ export class TunnelAgent {
 
                                 // Flush buffer as a single chunk to ensure atomicity
                                 const header = Buffer.from(`DATA ${connId}\n`);
+                                bridgeDataSocket.write(header);
+
                                 if (localSocket.data.buffer.length > 0) {
                                     const payload = Buffer.concat(localSocket.data.buffer);
                                     this.log(`Flushing ${payload.length} bytes of buffered data to bridge`);
-                                    const combined = Buffer.concat([header, payload]);
-                                    bridgeDataSocket.write(combined);
+                                    bridgeDataSocket.write(payload);
                                     localSocket.data.buffer = [];
-                                } else {
-                                    bridgeDataSocket.write(header);
                                 }
 
                                 // Bridge -> Local
@@ -174,7 +173,7 @@ export class TunnelAgent {
                         state.target.write(data);
                     } else {
                         // Buffer data if bridge connection isn't ready yet
-                        state.buffer.push(new Uint8Array(data));
+                        state.buffer.push(Buffer.from(data));
                     }
                 },
                 close: (localSocket) => {

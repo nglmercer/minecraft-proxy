@@ -55,7 +55,7 @@ export class BridgeServer {
                             state.target.write(data);
                         } else {
                             // Buffer until tunnel is ready. Copy data!
-                            state.buffer.push(new Uint8Array(data));
+                            state.buffer.push(Buffer.from(data));
                         }
                         return;
                     }
@@ -68,7 +68,7 @@ export class BridgeServer {
                     // 2. Sniffing / Handshake Phase
                     if (state.type === 'UNKNOWN') {
                         // Accumulate data to handle split packets
-                        state.buffer.push(new Uint8Array(data));
+                        state.buffer.push(Buffer.from(data));
 
                         // Check combined buffer
                         const combined = Buffer.concat(state.buffer);
