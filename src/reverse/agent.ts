@@ -137,16 +137,14 @@ export class TunnelAgent {
 
                                 // Flush buffer as a single chunk to ensure atomicity
                                 const header = Buffer.from(`DATA ${connId}\n`);
-                                let initialData = header;
+                                bridgeDataSocket.write(header);
 
                                 if (localSocket.data.buffer.length > 0) {
                                     const payload = Buffer.concat(localSocket.data.buffer);
                                     this.log(`Flushing ${payload.length} bytes of buffered data to bridge`);
-                                    initialData = Buffer.concat([header, payload]);
+                                    bridgeDataSocket.write(payload);
                                     localSocket.data.buffer = [];
                                 }
-
-                                bridgeDataSocket.write(initialData);
 
                                 // Bridge -> Local
                                 bridgeDataSocket.data = { target: localSocket };
