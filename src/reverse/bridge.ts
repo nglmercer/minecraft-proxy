@@ -105,8 +105,9 @@ export class BridgeServer {
                             }
 
                             // Doesn't match prefix, assume Player
-                            // For Player, we keep the PROXY header so the server can see real IP (if configured)
-                            this.convertToPlayer(socket, combined);
+                            // We STRIP the PROXY header (if present) to ensure the local Minecraft server
+                            // (which likely doesn't have proxy-protocol enabled) receives a clean stream.
+                            this.convertToPlayer(socket, effectiveBuffer);
                             return;
                         }
 
@@ -135,7 +136,7 @@ export class BridgeServer {
                             }
                         } else {
                             // Not Agent Protocol -> Player
-                            this.convertToPlayer(socket, combined);
+                            this.convertToPlayer(socket, effectiveBuffer);
                         }
                     }
                 },
