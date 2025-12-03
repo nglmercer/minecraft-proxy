@@ -19,6 +19,7 @@ interface SocketData {
     authenticated?: boolean;
     target?: Socket;
     buffer: Uint8Array[]; // Buffer for accumulating chunks
+    connId?: string; // Track connId for cleanup
 }
 
 export class BridgeServer {
@@ -85,9 +86,6 @@ export class BridgeServer {
 
                         // Heuristic: Check for Agent Protocol Prefixes
                         // "DATA " or "AUTH "
-                        // If the buffer is short, we might need to wait
-                        // Heuristic: Check for Agent Protocol Prefixes
-                        // "DATA " or "AUTH "
                         // Also check for "PROXY " to avoid misclassifying fragmented proxy headers
                         if (effectiveBuffer.length < 6) {
                             const partial = effectiveBuffer.toString('utf8');
@@ -146,6 +144,10 @@ export class BridgeServer {
                         this.log('Agent Control disconnected');
                         this.controlSocket = null;
                     }
+                    if (state.connId && this.pendingPlayers.has(state.connId)) {
+                        this.log(`Player ${state.connId} disconnected before tunnel established`);
+                        this.pendingPlayers.delete(state.connId);
+                    }
                     if (state.target) {
                         state.target.end();
                     }
@@ -174,6 +176,7 @@ export class BridgeServer {
         }
 
         const connId = Math.random().toString(36).substring(7);
+        socket.data.connId = connId;
         this.pendingPlayers.set(connId, socket);
         this.controlSocket.write(`CONNECT ${connId}\n`);
     }
