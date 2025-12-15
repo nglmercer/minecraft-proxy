@@ -22,6 +22,7 @@ interface SocketData {
     buffer: Uint8Array[]; // Buffer for accumulating chunks
     connId?: string; // Track connId for cleanup
     handshakeTimeout?: Timer;
+    pendingTimeout?: Timer;
 }
 
 const MAX_BUFFER_SIZE = 4096;
@@ -244,6 +245,16 @@ export class BridgeServer {
 
         const connId = randomUUID();
         socket.data.connId = connId;
+
+        // Set pending timeout
+        socket.data.pendingTimeout = setTimeout(() => {
+            if (this.pendingPlayers.has(connId)) {
+                this.log(`Pending connection ${connId} timed out waiting for agent.`);
+                this.pendingPlayers.delete(connId);
+                socket.end();
+            }
+        }, 10000); // 10s timeout
+
         this.pendingPlayers.set(connId, socket);
         this.controlSocket.write(`CONNECT ${connId}\n`);
     }
@@ -264,7 +275,7 @@ export class BridgeServer {
              socket.end();
              return;
         }
-        const providedSecret = parts[1];
+        const providedSecret = parts[1] || '';
         
         const secretBuf = Buffer.from(this.config.secret);
         const providedBuf = Buffer.from(providedSecret);
@@ -305,6 +316,12 @@ export class BridgeServer {
         if (connId && this.pendingPlayers.has(connId)) {
             const playerSocket = this.pendingPlayers.get(connId)!;
             this.pendingPlayers.delete(connId);
+            
+            // Clear Pending Timeout
+            if (playerSocket.data.pendingTimeout) {
+                clearTimeout(playerSocket.data.pendingTimeout);
+                playerSocket.data.pendingTimeout = undefined;
+            }
 
             socket.data.target = playerSocket;
             playerSocket.data.target = socket;
