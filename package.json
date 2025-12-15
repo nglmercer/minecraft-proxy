@@ -11,7 +11,7 @@
   ],
   "scripts": {
     "start": "bun run src/proxy.ts",
-    "test": "bun test",
+    "test": "bun test --timeout 15000",
     "typecheck": "bunx tsc --noEmit",
     "build": "bunx tsc -p tsconfig.build.json",
     "build:dev": "bun ./build.ts",

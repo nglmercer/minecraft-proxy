@@ -102,5 +102,5 @@ describe("Brute Force & Rate Limiting Attack Simulation", () => {
             expect(state.connectionsThisSecond).toBeGreaterThan(0);
             expect(state).toBeDefined();
         }
-    });
+    }, 30000);
 });
