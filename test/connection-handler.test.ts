@@ -54,6 +54,7 @@ describe('ConnectionHandler', () => {
                 proxyPort: 25566,
                 minecraftHost: 'backend.example.com',
                 minecraftPort: 25565,
+                transportType: 'tcp',
                 debug: false,
             },
             mockConnect as any

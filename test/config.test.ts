@@ -37,6 +37,7 @@ describe('Config', () => {
       proxyPort: 4000,
       minecraftHost: 'test.com',
       minecraftPort: 4001,
+      transportType: 'tcp',
       debug: true,
     };
     const config = createConfig(overrides);

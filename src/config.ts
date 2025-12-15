@@ -9,6 +9,8 @@ export interface ProxyConfig {
   minecraftHost: string;
   /** Port of the actual Minecraft server */
   minecraftPort: number;
+  /** Transport type to use (tcp or udp) */
+  transportType: 'tcp' | 'udp';
   /** Whether to enable debug logging */
   debug: boolean;
 }
@@ -20,6 +22,7 @@ export const defaultConfig: ProxyConfig = {
   proxyPort: 25566,
   minecraftHost: 'localhost',
   minecraftPort: 25565,
+  transportType: 'tcp',
   debug: false,
 };
 
