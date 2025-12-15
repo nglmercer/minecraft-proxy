@@ -5,6 +5,9 @@ import { UdpTransport } from './transports/UdpTransport';
 import type { Protocol, Packet } from './protocols/Protocol';
 import { MinecraftProtocol } from './protocols/MinecraftProtocol';
 
+const MAX_HANDSHAKE_SIZE = 4096; // 4KB
+const HANDSHAKE_TIMEOUT_MS = 5000;
+
 export class ProxyServer {
     private transport: Transport;
     private protocol: Protocol;
@@ -43,6 +46,18 @@ export class ProxyServer {
         let backend: Connection | null = null;
         let isHandshakeComplete = false;
 
+        const handshakeTimeout = setTimeout(() => {
+            if (!isHandshakeComplete) {
+                log('[Proxy] Handshake timeout');
+                client.close();
+            }
+        }, HANDSHAKE_TIMEOUT_MS);
+
+        const cleanup = () => {
+            clearTimeout(handshakeTimeout);
+            if (backend) backend.close();
+        };
+
         client.on('data', async (dataArg: unknown) => {
             const data = dataArg as Uint8Array;
             if (connected && backend) {
@@ -51,6 +66,12 @@ export class ProxyServer {
             }
 
             // Buffer logic
+            if (buffer.length + data.length > MAX_HANDSHAKE_SIZE) {
+                log('[Proxy] Handshake buffer overflow');
+                client.close();
+                return;
+            }
+
             const newBuffer = new Uint8Array(buffer.length + data.length);
             newBuffer.set(buffer);
             newBuffer.set(data, buffer.length);
@@ -61,6 +82,8 @@ export class ProxyServer {
                     const packet = this.protocol.parse(buffer);
                     if (packet) {
                         isHandshakeComplete = true;
+                        clearTimeout(handshakeTimeout);
+                        
                         log('[Proxy] Handshake parsed:', packet.data);
                         
                         // Decide backend? 
@@ -82,12 +105,12 @@ export class ProxyServer {
 
         client.on('close', () => {
             log('[Proxy] Client closed');
-            if (backend) backend.close();
+            cleanup();
         });
 
         client.on('error', (err: unknown) => {
             log('[Proxy] Client error:', err);
-            if (backend) backend.close();
+            cleanup();
         });
     }
 

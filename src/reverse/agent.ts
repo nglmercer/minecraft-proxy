@@ -36,10 +36,14 @@ export const defaultAgentConfig: AgentConfig = {
     debug: false
 };
 
+const MAX_CONCURRENT_CONNECTIONS = 50;
+const MAX_PENDING_BUFFER_SIZE = 1024 * 1024; // 1MB
+
 export class TunnelAgent {
     private config: AgentConfig;
     private controlSocket: Socket<ControlSocketData> | null = null;
     private reconnectTimer: Timer | null = null;
+    private activeConnections = new Set<string>(); // local socket references could be stored if we need them
 
     constructor(config: AgentConfig) {
         this.config = config;
@@ -63,15 +67,19 @@ export class TunnelAgent {
                 },
                 data: (socket, data) => {
                     const chunk = data.toString();
-                    // Initialize buffer if not present (should be set in open, but just in case)
                     if (!socket.data || typeof socket.data.buffer !== 'string') {
                         socket.data = { buffer: '' };
+                    }
+
+                    if (socket.data.buffer.length + chunk.length > 1024 * 16) {
+                        this.log('Bridge sent too much data without newline. Disconnecting.');
+                        socket.end();
+                        return;
                     }
 
                     socket.data.buffer += chunk;
 
                     const lines = socket.data.buffer.split('\n');
-                    // Process all complete lines
                     while (lines.length > 1) {
                         const msg = lines.shift()!.trim();
                         if (!msg) continue;
@@ -95,7 +103,6 @@ export class TunnelAgent {
                             }
                         }
                     }
-                    // Keep the last partial line
                     socket.data.buffer = lines[0] ?? '';
                 },
                 close: () => {
@@ -106,7 +113,6 @@ export class TunnelAgent {
                 error: (err) => {
                     this.log(`Bridge connection error: ${err}`);
                     this.controlSocket = null;
-                    // Reconnect handled by close
                 }
             }
         }).catch(err => {
@@ -124,7 +130,15 @@ export class TunnelAgent {
     }
 
     private handleConnectRequest(connId: string) {
+        if (this.activeConnections.size >= MAX_CONCURRENT_CONNECTIONS) {
+            this.log(`Rejected connection ${connId}: Too many active connections (${this.activeConnections.size})`);
+            // Ideally tell bridge to close, but we can't easily on control channel without protocol update.
+            // Just ignoring it will cause bridge to timeout eventually.
+            return;
+        }
+
         this.log(`Opening tunnel for connection ${connId}...`);
+        this.activeConnections.add(connId);
 
         // 1. Connect to Local Minecraft Server
         Bun.connect<LocalSocketData>({
@@ -140,10 +154,8 @@ export class TunnelAgent {
                         port: this.config.bridgeControlPort,
                         socket: {
                             open: (bridgeDataSocket) => {
-                                // Local -> Bridge
                                 localSocket.data.target = bridgeDataSocket;
 
-                                // Flush buffer as a single chunk to ensure atomicity
                                 const header = Buffer.from(`DATA ${connId}\n`);
                                 bridgeDataSocket.write(header);
 
@@ -154,7 +166,6 @@ export class TunnelAgent {
                                     localSocket.data.buffer = [];
                                 }
 
-                                // Bridge -> Local
                                 bridgeDataSocket.data = { target: localSocket };
                             },
                             data: (bridgeDataSocket, data) => {
@@ -180,17 +191,25 @@ export class TunnelAgent {
                     if (state.target) {
                         state.target.write(data);
                     } else {
-                        // Buffer data if bridge connection isn't ready yet
+                        // Check buffer limits
+                        const currentSize = state.buffer.reduce((acc, c) => acc + c.length, 0);
+                        if (currentSize + data.length > MAX_PENDING_BUFFER_SIZE) {
+                             this.log(`Local buffer exceeded for ${connId}, dropping connection.`);
+                             localSocket.end();
+                             return;
+                        }
                         state.buffer.push(Buffer.from(data));
                     }
                 },
                 close: (localSocket) => {
+                    this.activeConnections.delete(connId);
                     const state = localSocket.data;
                     if (state?.target) {
                         state.target.end();
                     }
                 },
                 error: (localSocket) => {
+                    this.activeConnections.delete(connId);
                     const state = localSocket.data;
                     if (state?.target) {
                         state.target.end();
@@ -199,8 +218,7 @@ export class TunnelAgent {
             }
         }).catch(err => {
             this.log(`Failed to connect to local Minecraft server: ${err}`);
-            // We should probably tell the bridge to abort, but in this simple version, 
-            // the bridge will timeout or the player will just get disconnected.
+            this.activeConnections.delete(connId);
         });
     }
 

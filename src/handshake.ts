@@ -37,14 +37,32 @@ export function parseHandshake(buffer: Uint8Array): { handshake: Handshake; byte
   offset = protocolVersionResult.offset;
 
   // Read server address (string)
+  // Ensure we have enough bytes for the Length VarInt
   const addressLengthResult = readVarIntSync(buffer, offset);
   const addressLength = addressLengthResult.value;
   offset = addressLengthResult.offset;
+
+  if (addressLength > 1024) {
+      throw new Error(`Server address too long: ${addressLength}`);
+  }
+
+  if (addressLength < 0) {
+      throw new Error(`Invalid server address length: ${addressLength}`);
+  }
+
+  // Ensure we have enough bytes for the string
+  if (offset + addressLength > buffer.length) {
+      throw new Error(`Buffer too short for address string (expected ${addressLength} bytes)`);
+  }
 
   const serverAddress = new TextDecoder().decode(buffer.slice(offset, offset + addressLength));
   offset += addressLength;
 
   // Read server port (unsigned short, 2 bytes, big-endian)
+  if (offset + 2 > buffer.length) {
+      throw new Error('Buffer too short for server port');
+  }
+
   const serverPort = (buffer[offset]! << 8) | buffer[offset + 1]!;
   offset += 2;
 
@@ -52,6 +70,16 @@ export function parseHandshake(buffer: Uint8Array): { handshake: Handshake; byte
   const nextStateResult = readVarIntSync(buffer, offset);
   const nextState = nextStateResult.value;
   offset = nextStateResult.offset;
+
+  // Validate Next State
+  if (nextState !== 1 && nextState !== 2) {
+      // Technically Minecraft only uses 1 (Status) or 2 (Login)
+      // Some mods might use others, but for a standard proxy, we might want to warn or strict checks.
+      // Let's just validate it's positive for now.
+      if (nextState < 0 || nextState > 4) {
+          throw new Error(`Invalid next state: ${nextState}`);
+      }
+  }
 
   // Verify that we read exactly the packet length (excluding the packet length field itself)
   const expectedBytes = packetLength + varIntLength(packetLength);
