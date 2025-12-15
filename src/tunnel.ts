@@ -2,7 +2,20 @@
  * Tunnel manager for bidirectional data flow between two sockets.
  */
 
-type Socket = any; // To avoid TypeScript issues with Bun's Socket
+// Define the expected interface for Sockets used in this tunnel.
+// Note: This expects sockets to allow assigning handlers to .data, .close, .error properties.
+// Standard Bun Sockets might not behave this way directly unless wrapped or polyfilled.
+export interface TunnelSocket {
+    readyState: 'open' | 'closed' | string | number;
+    write(data: Uint8Array | Buffer): void | number;
+    end(): void;
+    // Handler setters
+    data: (data: Buffer) => void;
+    close: () => void;
+    error: (error: Error) => void;
+    // Allow other properties
+    [key: string]: unknown;
+}
 
 export interface TunnelOptions {
   /** Callback when tunnel is closed */
@@ -19,8 +32,8 @@ export interface TunnelOptions {
  * Automatically cleans up when either side closes.
  */
 export function createTunnel(
-  client: Socket,
-  backend: Socket,
+  client: TunnelSocket,
+  backend: TunnelSocket,
   options: TunnelOptions = {}
 ): void {
   const { onClose, onError, debug = false } = options;
@@ -37,12 +50,12 @@ export function createTunnel(
 
     log('Closing tunnel');
 
-    if (!clientClosed && client.readyState === 'open') {
+    if (!clientClosed && (client.readyState === 'open' || client.readyState === 1)) {
       client.end();
       clientClosed = true;
     }
 
-    if (!backendClosed && backend.readyState === 'open') {
+    if (!backendClosed && (backend.readyState === 'open' || backend.readyState === 1)) {
       backend.end();
       backendClosed = true;
     }
@@ -54,7 +67,7 @@ export function createTunnel(
 
   // Forward client data to backend
   client.data = (data: Buffer) => {
-    if (backend.readyState === 'open') {
+    if (backend.readyState === 'open' || backend.readyState === 1) {
       backend.write(data);
     } else {
       closeTunnel();
@@ -63,7 +76,7 @@ export function createTunnel(
 
   // Forward backend data to client
   backend.data = (data: Buffer) => {
-    if (client.readyState === 'open') {
+    if (client.readyState === 'open' || client.readyState === 1) {
       client.write(data);
     } else {
       closeTunnel();

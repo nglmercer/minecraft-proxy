@@ -1,9 +1,14 @@
 import type { Transport, Connection } from './Transport';
-import type { Socket } from 'bun';
+import type { Socket, Server } from 'bun';
+
+interface TcpSocketData {
+    connection: TcpConnection;
+    listeners?: Record<string, Function[]>;
+}
 
 export class TcpConnection implements Connection {
-    public data: any = {};
-    constructor(private socket: Socket<any>) {}
+    public data: Record<string, unknown> = {};
+    constructor(private socket: Socket<TcpSocketData>) {}
 
     write(data: Uint8Array): void {
         this.socket.write(data);
@@ -13,24 +18,29 @@ export class TcpConnection implements Connection {
         this.socket.end();
     }
 
-    on(event: 'data' | 'close' | 'error', listener: any): void {
-        // Bun sockets use callbacks defined in listen/connect.
-        // Since we are wrapping an existing socket passed from "listen",
-        // we might need to intercept the callbacks or use a different approach.
-        // However, Bun.listen requires defining handlers *at creation*.
-        // So TcpTransport needs to handle the mapping.
+    on(event: 'data', listener: (data: Uint8Array) => void): void;
+    on(event: 'close', listener: () => void): void;
+    on(event: 'error', listener: (err: Error) => void): void;
+    on(event: string, listener: Function): void {
+        // TcpSocketData is guaranteed to be initialized in listen/connect if we control creation,
+        // but let's be safe or init if missing (though `socket.data` on incoming is set in `open`).
         
-        // This suggests TcpConnection works best if it's an Event Emitter or 
-        // if callbacks are assigned to it.
+        // Note: For incoming sockets, `socket.data` is set in `open`.
+        // If this class is used for outgoing, we must ensure `socket.data` is set.
         
-        // Let's implement a simple listener registry here.
-        if (!this.socket.data) this.socket.data = {};
-        if (!this.socket.data.listeners) this.socket.data.listeners = {};
-        
-        if (!this.socket.data.listeners[event]) {
-            this.socket.data.listeners[event] = [];
+        if (!this.socket.data) {
+             // This is tricky if Socket<TcpSocketData> expects it to be there.
+             // But usually we can assign.
+             this.socket.data = { connection: this };
         }
-        this.socket.data.listeners[event].push(listener);
+        
+        const data = this.socket.data;
+        if (!data.listeners) data.listeners = {};
+        
+        if (!data.listeners[event]) {
+            data.listeners[event] = [];
+        }
+        data.listeners[event].push(listener);
     }
 
     get remoteAddress() {
@@ -42,40 +52,45 @@ export class TcpConnection implements Connection {
     }
     
     // For manual triggering by the Transport manager
-    _trigger(event: string, ...args: any[]) {
-        const listeners = (this.socket.data as any)?.listeners?.[event];
+    _trigger(event: string, ...args: unknown[]) {
+        const listeners = this.socket.data?.listeners?.[event];
         if (listeners) {
-            listeners.forEach((l: any) => l(...args));
+            listeners.forEach((l) => (l as any)(...args));
         }
     }
 }
 
+// Minimal interface for Bun.listen return value
+interface BunListener {
+    stop(): void;
+}
+
 export class TcpTransport implements Transport {
-    private server: any; // Bun Server
+    private server: BunListener | null = null;
     private connectionHandler: ((conn: Connection) => void) | null = null;
     
     async listen(port: number, host: string = '0.0.0.0'): Promise<void> {
-        this.server = Bun.listen<{ connection: TcpConnection }>({
+        this.server = Bun.listen<TcpSocketData>({
             hostname: host,
             port: port,
             socket: {
                 open: (socket) => {
                     const conn = new TcpConnection(socket);
-                    socket.data = { connection: conn }; // Link wrapper to socket
+                    socket.data = { connection: conn };
                     if (this.connectionHandler) {
                         this.connectionHandler(conn);
                     }
                 },
                 data: (socket, data) => {
-                    const conn = (socket.data as any).connection as TcpConnection;
+                    const conn = socket.data.connection;
                     conn._trigger('data', data);
                 },
                 close: (socket) => {
-                    const conn = (socket.data as any).connection as TcpConnection;
+                    const conn = socket.data.connection;
                     conn._trigger('close');
                 },
                 error: (socket, error) => {
-                    const conn = (socket.data as any).connection as TcpConnection;
+                    const conn = socket.data.connection;
                     conn._trigger('error', error);
                 }
             }

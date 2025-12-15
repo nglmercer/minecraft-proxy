@@ -2,7 +2,7 @@
 export interface Packet {
     size: number;
     id: number;
-    data: any;
+    data: unknown;
 }
 
 export interface Protocol {

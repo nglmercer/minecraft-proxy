@@ -4,7 +4,6 @@ import { TcpTransport } from './transports/TcpTransport';
 import { UdpTransport } from './transports/UdpTransport';
 import type { Protocol, Packet } from './protocols/Protocol';
 import { MinecraftProtocol } from './protocols/MinecraftProtocol';
-// import { parseHandshake } from './handshake'; // We use the Protocol interface now
 
 export class ProxyServer {
     private transport: Transport;
@@ -44,7 +43,8 @@ export class ProxyServer {
         let backend: Connection | null = null;
         let isHandshakeComplete = false;
 
-        client.on('data', async (data) => {
+        client.on('data', async (dataArg: unknown) => {
+            const data = dataArg as Uint8Array;
             if (connected && backend) {
                 backend.write(data);
                 return;
@@ -64,16 +64,17 @@ export class ProxyServer {
                         log('[Proxy] Handshake parsed:', packet.data);
                         
                         // Decide backend? 
-                        // For now we use config.minecraftHost/Port.
-                        // In future, packet.data could determine host.
-                        
                         await this.connectBackend(client, buffer); // Send accumulated buffer
-                        backend = client.data?.backend;
+                        
+                        // Safely retrieve backend from data
+                        backend = (client.data?.['backend'] as Connection) || null;
+                        
                         connected = true;
                         buffer = new Uint8Array(); // clear
                     }
-                } catch (e: any) {
-                    log('[Proxy] Handshake error or unknown protocol:', e.message);
+                } catch (e: unknown) {
+                    const msg = e instanceof Error ? e.message : String(e);
+                    log('[Proxy] Handshake error or unknown protocol:', msg);
                     client.close();
                 }
             }
@@ -84,7 +85,7 @@ export class ProxyServer {
             if (backend) backend.close();
         });
 
-        client.on('error', (err) => {
+        client.on('error', (err: unknown) => {
             log('[Proxy] Client error:', err);
             if (backend) backend.close();
         });
@@ -92,23 +93,6 @@ export class ProxyServer {
 
     private async connectBackend(client: Connection, initialData: Uint8Array) {
         const log = this.config.debug ? console.log : () => {};
-        
-        // We need a transport for the backend too.
-        // Usually matches frontend, but not always.
-        // For simplicity, reuse the same Transport Class (factory wise) or just Tcp?
-        // Minecraft Bedrock (UDP) -> usually UDP backend.
-        // Minecraft Java (TCP) -> TCP backend.
-        
-        let backendTransport: Transport;
-        // In a real generic implementation, we'd need a way to spawn clients.
-        // Transport interface as defined is a Server (listen).
-        // we need a client connector.
-        
-        // Let's cheat a bit and use direct Bun.connect / Bun.udpSocket for backend for now,
-        // OR extend Transport to have `connect()`.
-        
-        // Let's extend the logic inline for now, but modularity suggests Transport should handle it.
-        // I'll assume TCP for now if not UdpTransport, but UdpTransport isn't really "connectable" in the same way (no handshake).
         
         try {
             if (this.config.transportType === 'udp') {
@@ -125,16 +109,12 @@ export class ProxyServer {
                     }
                 });
                 
-                // Wrap in Connection?
-                // UDP "Connection" needs to send to destination.
-                // The `socket` here is bound locally. sending needs dest.
-                
                 const backendConn = {
                     write: (data: Uint8Array) => {
                         socket.send(data, this.config.minecraftPort, this.config.minecraftHost);
                     },
                     close: () => socket.close(),
-                    on: () => {}, // Not used here as we used callbacks above
+                    on: () => {}, 
                     // ...
                 } as unknown as Connection;
                 
@@ -172,7 +152,7 @@ export class ProxyServer {
                 backendConn.write(initialData);
             }
 
-        } catch (err) {
+        } catch (err: unknown) {
             log('[Proxy] Failed to connect to backend', err);
             client.close();
         }

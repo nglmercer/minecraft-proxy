@@ -14,8 +14,16 @@ export interface AgentConfig {
     debug?: boolean;
 }
 
+interface ControlSocketData {
+    buffer: string;
+}
+
+interface BridgeDataSocketData {
+    target: Socket<LocalSocketData>;
+}
+
 interface LocalSocketData {
-    target?: Socket<any>;
+    target?: Socket<BridgeDataSocketData>;
     buffer: Uint8Array[];
 }
 
@@ -30,7 +38,7 @@ export const defaultAgentConfig: AgentConfig = {
 
 export class TunnelAgent {
     private config: AgentConfig;
-    private controlSocket: Socket<any> | null = null;
+    private controlSocket: Socket<ControlSocketData> | null = null;
     private reconnectTimer: Timer | null = null;
 
     constructor(config: AgentConfig) {
@@ -44,7 +52,7 @@ export class TunnelAgent {
     private connectControl() {
         this.log(`Connecting to Bridge Control at ${this.config.bridgeHost}:${this.config.bridgeControlPort}...`);
 
-        Bun.connect<{ buffer: string }>({
+        Bun.connect<ControlSocketData>({
             hostname: this.config.bridgeHost,
             port: this.config.bridgeControlPort,
             socket: {
@@ -127,7 +135,7 @@ export class TunnelAgent {
                     localSocket.data = { buffer: [] };
 
                     // 2. Connect to Bridge (Data Channel)
-                    Bun.connect<{ target: Socket<any> }>({
+                    Bun.connect<BridgeDataSocketData>({
                         hostname: this.config.bridgeHost,
                         port: this.config.bridgeControlPort,
                         socket: {
@@ -150,15 +158,15 @@ export class TunnelAgent {
                                 bridgeDataSocket.data = { target: localSocket };
                             },
                             data: (bridgeDataSocket, data) => {
-                                const target = (bridgeDataSocket.data as any)?.target as Socket;
+                                const target = bridgeDataSocket.data?.target;
                                 if (target) target.write(data);
                             },
                             close: (bridgeDataSocket) => {
-                                const target = (bridgeDataSocket.data as any)?.target as Socket;
+                                const target = bridgeDataSocket.data?.target;
                                 if (target) target.end();
                             },
                             error: (bridgeDataSocket) => {
-                                const target = (bridgeDataSocket.data as any)?.target as Socket;
+                                const target = bridgeDataSocket.data?.target;
                                 if (target) target.end();
                             }
                         }

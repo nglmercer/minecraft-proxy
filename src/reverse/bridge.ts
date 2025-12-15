@@ -17,15 +17,15 @@ type SocketType = 'UNKNOWN' | 'AGENT_CONTROL' | 'AGENT_DATA' | 'PLAYER';
 interface SocketData {
     type: SocketType;
     authenticated?: boolean;
-    target?: Socket;
+    target?: Socket<SocketData>;
     buffer: Uint8Array[]; // Buffer for accumulating chunks
     connId?: string; // Track connId for cleanup
 }
 
 export class BridgeServer {
     private config: BridgeConfig;
-    private controlSocket: Socket<any> | null = null;
-    private pendingPlayers = new Map<string, Socket<any>>();
+    private controlSocket: Socket<SocketData> | null = null;
+    private pendingPlayers = new Map<string, Socket<SocketData>>();
 
     constructor(config: BridgeConfig) {
         this.config = config;
@@ -159,7 +159,7 @@ export class BridgeServer {
         });
     }
 
-    private convertToPlayer(socket: Socket<any>, initialData: Buffer) {
+    private convertToPlayer(socket: Socket<SocketData>, initialData: Buffer) {
         this.log(`Detected: MINECRAFT PLAYER (${socket.remoteAddress})`);
         socket.data.type = 'PLAYER';
         // Keep the data in the buffer, it will be flushed when tunnel opens
@@ -181,7 +181,7 @@ export class BridgeServer {
         this.controlSocket.write(`CONNECT ${connId}\n`);
     }
 
-    private processAuth(socket: Socket<any>, commandLine: string) {
+    private processAuth(socket: Socket<SocketData>, commandLine: string) {
         const secret = commandLine.split(' ')[1];
         if (secret === this.config.secret) {
             socket.data.authenticated = true;
@@ -194,7 +194,7 @@ export class BridgeServer {
         }
     }
 
-    private processDataHandshake(socket: Socket<any>, commandLine: string, payload: Uint8Array) {
+    private processDataHandshake(socket: Socket<SocketData>, commandLine: string, payload: Uint8Array) {
         const connId = commandLine.split(' ')[1];
         this.log(`Detected: AGENT DATA channel for ${connId}`);
         socket.data.type = 'AGENT_DATA';
@@ -231,7 +231,7 @@ export class BridgeServer {
         }
     }
 
-    private handleControlMessage(socket: Socket<any>, data: Uint8Array) {
+    private handleControlMessage(socket: Socket<SocketData>, data: Uint8Array) {
         // Only for subsequent control messages if any (currently none)
     }
 

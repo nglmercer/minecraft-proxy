@@ -1,17 +1,25 @@
 import type { Transport, Connection } from './Transport';
+import type { Socket } from 'bun';
+
+// Bun's UDP socket type definition is tricky in some versions.
+interface BunUDPSocket {
+    send(data: Uint8Array | string | Buffer, port: number, address: string): number | boolean;
+    close(): void;
+    reload(options: any): void;
+}
 
 interface UdpSession {
     address: string;
     port: number;
     lastActive: number;
     connection: UdpConnection;
-    listeners: { [key: string]: Function[] };
+    listeners: Record<string, Function[]>;
 }
 
 export class UdpConnection implements Connection {
-    public data: any = {};
+    public data: Record<string, unknown> = {};
     constructor(
-        private socket: any,
+        private socket: BunUDPSocket,
         public remoteAddress: string,
         public remotePort: number,
         private sessionParams: UdpSession
@@ -24,33 +32,38 @@ export class UdpConnection implements Connection {
     close(): void {
         // In UDP, closing means removing the session.
         this._trigger('close');
-        // Actual cleanup should happen in the Transport manager
+        // Actual cleanup should happen in the Transport manager, 
+        // but currently UdpTransport manages sessions via timeout.
+        // Ideally we should signal transport to remove session immediately.
     }
 
-    on(event: 'data' | 'close' | 'error', listener: any): void {
+    on(event: 'data', listener: (data: Uint8Array) => void): void;
+    on(event: 'close', listener: () => void): void;
+    on(event: 'error', listener: (err: Error) => void): void;
+    on(event: string, listener: Function): void {
         if (!this.sessionParams.listeners[event]) {
             this.sessionParams.listeners[event] = [];
         }
         this.sessionParams.listeners[event].push(listener);
     }
     
-    _trigger(event: string, ...args: any[]) {
+    _trigger(event: string, ...args: unknown[]) {
         const listeners = this.sessionParams.listeners[event];
         if (listeners) {
-            listeners.forEach(l => l(...args));
+            listeners.forEach(l => (l as any)(...args));
         }
     }
 }
 
 export class UdpTransport implements Transport {
-    private socket: any;
+    private socket: BunUDPSocket | null = null;
     private connectionHandler: ((conn: Connection) => void) | null = null;
     private sessions = new Map<string, UdpSession>();
     private cleanupInterval: Timer | null = null;
     private sessionTimeoutMs = 60000; // 60s timeout for UDP sessions
 
     async listen(port: number, host: string = '0.0.0.0'): Promise<void> {
-        this.socket = await Bun.udpSocket({
+        this.socket = (await Bun.udpSocket({
             hostname: host,
             port: port,
             socket: {
@@ -59,7 +72,8 @@ export class UdpTransport implements Transport {
                     let session = this.sessions.get(key);
 
                     if (!session) {
-                        session = {
+                        // Create partial session first then assign connection
+                         session = {
                             address,
                             port,
                             lastActive: Date.now(),
@@ -82,7 +96,7 @@ export class UdpTransport implements Transport {
                     console.error("UDP Socket Error", error);
                 }
             }
-        });
+        })) as unknown as BunUDPSocket;
 
         console.log(`UDP Transport listening on ${host}:${port}`);
         
@@ -106,7 +120,7 @@ export class UdpTransport implements Transport {
 
     close(): void {
         if (this.socket) {
-            this.socket.close();
+            this.socket.close(); // Bun 1.1+ supports .close() on UDPSocket (which is usually just void)
         }
         if (this.cleanupInterval) {
             clearInterval(this.cleanupInterval);

@@ -11,7 +11,7 @@ export interface Connection {
     remotePort?: number;
     
     // Abstract data storage
-    data?: any;
+    data?: Record<string, unknown>;
 }
 
 export interface Transport {
