@@ -1,5 +1,5 @@
 
-import type { Socket } from 'bun';
+import type { Socket,TCPSocketListener } from 'bun';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { parseHandshake } from '../../core/handshake.js';
 import { globalMetrics } from '../metrics/MetricsRegistry.js';
@@ -52,7 +52,7 @@ export class BridgeServer {
     private agents = new Map<string, Socket<SocketData>>(); 
     private pendingPlayers = new Map<string, Socket<SocketData>>();
     private ipStates = new Map<string, IpState>();
-
+    private server: TCPSocketListener<SocketData> | null = null;
     constructor(config: BridgeConfig) {
         this.config = config;
         this.initMetrics();
@@ -70,7 +70,7 @@ export class BridgeServer {
         // Clean up IP states periodically
         setInterval(() => this.cleanupIpStates(), 60_000);
 
-        Bun.listen<SocketData>({
+        this.server = Bun.listen<SocketData>({
             hostname: '0.0.0.0',
             port: this.config.port,
             socket: {
@@ -282,17 +282,26 @@ export class BridgeServer {
         }
 
         if (!targetAgentId) {
-             this.log(`Could not determine target agent for ${socket.remoteAddress}. Host sniffing failed.`);
-             // Maybe fallback to a default agent?
-             if (this.agents.has('default')) {
+             this.log(`Could not determine target agent for ${socket.remoteAddress}. Host sniffing failed (Host: ${this.server?.hostname || 'unknown'}).`);
+             
+             // Smart Fallback: If only one agent is connected, route to it!
+             // This is crucial for Railway/TCP Proxy setups where wildcards aren't supported.
+             if (this.agents.size === 1) {
+                 const firstAgentId = this.agents.keys().next().value;
+                 this.log(`Single-Tenant Mode: Defaulting traffic to agent '${firstAgentId}'`);
+                 targetAgentId = firstAgentId || null;
+             }
+             // Fallback to explicit 'default' agent if present
+             else if (this.agents.has('default')) {
                  targetAgentId = 'default';
              } else {
+                 this.log('No unique target agent found. (Agents connected: ' + this.agents.size + '). Dropping.');
                  socket.end();
                  return;
              }
         }
 
-        const agentSocket = this.agents.get(targetAgentId);
+        const agentSocket = this.agents.get(targetAgentId!);
 
         if (!agentSocket) {
             this.log(`Agent '${targetAgentId}' not connected. Dropping player.`);

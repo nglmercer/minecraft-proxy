@@ -17,6 +17,9 @@ console.log(`Secret configured: ${SECRET ? 'Yes' : 'No'}`);
 const bridge = new BridgeServer({
     port: PORT,
     secret: SECRET,
+    // Si configuras un dominio propio (ej. "miserver.com"), el bridge podrá distinguir
+    // entre "survival.miserver.com" y "lobby.miserver.com".
+    domain: process.env.BRIDGE_DOMAIN || undefined, 
     debug: true,
 });
 

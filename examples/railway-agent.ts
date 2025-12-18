@@ -31,7 +31,12 @@ const agent = new TunnelAgent({
 
 agent.start();
 
-console.log('Agent is running. If the connection fails, check:');
-console.log('1. Is the Railway service running?');
-console.log('2. Does the Secret match?');
-console.log('3. Is the TCP Proxy port (54119) correct?');
+console.log('Agent is running.');
+console.log('---------------------------------------------------------');
+console.log('HOW TO CONNECT:');
+console.log(`1. In Minecraft, simply add server: ${RAILWAY_PROXY_HOST}:${RAILWAY_PROXY_PORT}`);
+console.log('   (No need for subdomains like ada30e56...)');
+console.log('2. IMPORTANT: You see "Authenticated successfully. Domain: ..."? IGNORE THE DOMAIN.');
+console.log('   New "Single-Tenant Mode" will route ALL traffic to you automatically.');
+console.log('---------------------------------------------------------');
+
