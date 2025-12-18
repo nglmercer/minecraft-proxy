@@ -1,7 +1,7 @@
 
 import type { Socket } from 'bun';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
-import { parseHandshake } from '../../handshake.js';
+import { parseHandshake } from '../../core/handshake.js';
 import { globalMetrics } from '../metrics/MetricsRegistry.js';
 
 export interface BridgeConfig {

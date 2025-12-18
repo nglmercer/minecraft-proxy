@@ -1,7 +1,5 @@
 import { describe, expect, test, afterAll } from 'bun:test';
-import { ProxyServer } from '../src/ProxyServer';
-import { PassthroughProtocol } from '../src/protocols/PassthroughProtocol';
-
+import { ProxyServer, PassthroughProtocol} from '../../src';
 describe('UDP Integration Test', () => {
     const BACKEND_PORT = 31001;
     const PROXY_PORT = 31002;

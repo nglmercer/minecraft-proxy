@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { loadEnv } from '../src/utils/env-loader.js';
+import { loadEnv } from '../../src/utils/env-loader.js';
 import { writeFileSync, unlinkSync, existsSync } from 'fs';
 import { join } from 'path';
 

@@ -1,6 +1,6 @@
 
 import { describe, test, expect } from "bun:test";
-import { BridgeServer } from "../src/reverse/bridge";
+import { BridgeServer } from "../../src";
 
 // Utilities for creating clients
 const connect = (port: number) => Bun.connect({

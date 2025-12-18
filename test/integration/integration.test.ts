@@ -1,6 +1,6 @@
 import { describe, expect, test, afterAll } from 'bun:test';
-import { startProxy } from '../src/proxy.js';
-import { writeVarIntSync } from '../src/varint.js';
+import { startProxy } from "../../src";
+import { writeVarIntSync } from "../../src";
 
 describe('Integration Test (Real TCP Sockets)', () => {
     const BACKEND_PORT = 30001;

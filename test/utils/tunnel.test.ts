@@ -1,6 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach, mock } from 'bun:test';
-import { createTunnel, type TunnelOptions } from '../src/tunnel.js';
-
+import { createTunnel } from '../../src';
 describe('Tunnel', () => {
   let mockClient: any;
   let mockBackend: any;

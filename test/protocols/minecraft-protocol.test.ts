@@ -1,7 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { MinecraftProtocol } from '../src/protocols/MinecraftProtocol';
-import { writeVarIntSync } from '../src/varint';
-
+import { MinecraftProtocol, writeVarIntSync } from '../../src';
 describe('MinecraftProtocol', () => {
     test('should parse a valid handshake packet', () => {
         const protocol = new MinecraftProtocol();

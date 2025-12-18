@@ -1,6 +1,5 @@
 import type { Protocol, Packet } from './Protocol';
-import { parseHandshake, type Handshake } from '../handshake';
-
+import { parseHandshake } from '../core/handshake';
 export class MinecraftProtocol implements Protocol {
     parse(buffer: Uint8Array): Packet | null {
         try {

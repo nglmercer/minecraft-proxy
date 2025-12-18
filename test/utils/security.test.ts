@@ -1,7 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { readVarIntSync } from '../src/varint';
-import { parseHandshake } from '../src/handshake';
-
+import { parseHandshake,readVarIntSync } from '../../src';
 describe('Security / Validation Tests', () => {
 
     test('VarInt should throw if more than 5 bytes', () => {

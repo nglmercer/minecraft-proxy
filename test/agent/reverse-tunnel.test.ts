@@ -1,6 +1,6 @@
 import { describe, expect, test, afterAll, beforeAll } from 'bun:test';
-import { BridgeServer } from '../src/reverse/bridge.js';
-import { TunnelAgent } from '../src/reverse/agent.js';
+import { BridgeServer } from '../../src';
+import { TunnelAgent } from '../../src';
 import type { Socket } from 'bun';
 
 // Helper to create a delay

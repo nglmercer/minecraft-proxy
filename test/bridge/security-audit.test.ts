@@ -1,10 +1,10 @@
 
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { BridgeServer } from "../src/reverse/bridge";
-import { TunnelAgent } from "../src/reverse/agent";
-import { ProxyServer } from "../src/ProxyServer";
-import { TcpTransport } from "../src/transports/TcpTransport";
-import { MinecraftProtocol } from "../src/protocols/MinecraftProtocol";
+import { BridgeServer } from "../../src";
+import { TunnelAgent } from "../../src";
+import { ProxyServer } from "../../src";
+import { TcpTransport } from "../../src";
+import { MinecraftProtocol } from "../../src";
 
 // Utilities for creating clients
 const connect = (port: number) => Bun.connect({

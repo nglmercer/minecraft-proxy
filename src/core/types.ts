@@ -1,6 +1,5 @@
 
-import type { Connection } from './transports/Transport';
-
+import type { Connection } from '../transports/Transport';
 export type Listener<T extends any[] = any[]> = (...args: T) => void;
 
 export interface SocketData {
