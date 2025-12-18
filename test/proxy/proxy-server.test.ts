@@ -1,7 +1,7 @@
 import { describe, expect, test, mock, beforeEach } from 'bun:test';
-import { ProxyServer } from '../src/ProxyServer';
-import type { Transport, Connection } from '../src/transports/Transport';
-import type { Protocol, Packet } from '../src/protocols/Protocol';
+import { ProxyServer } from '../../src';
+import type { Transport, Connection } from '../../src/transports/Transport';
+import type { Protocol, Packet } from '../../src/protocols/Protocol';
 
 // Mocks
 class MockConnection implements Connection {

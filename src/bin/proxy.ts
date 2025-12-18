@@ -1,5 +1,5 @@
-import { loadConfig } from '../config-manager.js';
-import { defaultConfig } from '../config.js';
+import { loadConfig } from '../config/config-manager.js';
+import { defaultConfig } from '../config/config.js';
 import { startProxy } from '../index.js';
 
 console.log('--- Minecraft TCP Proxy ---');

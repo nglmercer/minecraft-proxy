@@ -1,4 +1,4 @@
-import { createConfig, type ProxyConfig } from './config.js';
+import { createConfig, type ProxyConfig } from '../config/config.js';
 import { ProxyServer } from './ProxyServer.js';
 
 /**

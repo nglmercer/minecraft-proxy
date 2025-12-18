@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeEach, mock } from 'bun:test';
-import { ConnectionHandler } from '../src/connection-handler.js';
-import { writeVarIntSync } from '../src/varint.js';
+import { ConnectionHandler } from '../../src/core/connection-handler.js';
+import { writeVarIntSync } from '../../src/core/varint.js';
 
 // Helper to create a mock socket
 function createMockSocket() {

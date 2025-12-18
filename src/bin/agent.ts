@@ -1,4 +1,4 @@
-import { loadConfig } from '../config-manager.js';
+import { loadConfig } from '../config/config-manager.js';
 import { defaultAgentConfig } from '../reverse/agent.js';
 import { TunnelAgent } from '../index.js';
 

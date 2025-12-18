@@ -1,5 +1,5 @@
 import { parseHandshake } from './handshake.js';
-import type { ProxyConfig } from './config.js';
+import type { ProxyConfig } from '../config/config.js';
 
 type Socket = any; // To avoid TypeScript issues with Bun's Socket
 

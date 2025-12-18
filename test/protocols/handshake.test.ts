@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { parseHandshake } from '../src/handshake.js';
-import { writeVarIntSync } from '../src/varint.js';
+import { parseHandshake } from '../../src/core/handshake.js';
+import { writeVarIntSync } from '../../src/core/varint.js';
 
 describe('Handshake', () => {
   test('parseHandshake - minimal handshake', () => {

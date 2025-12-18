@@ -1,5 +1,6 @@
+
 import { describe, it, expect, afterEach, beforeEach } from 'bun:test';
-import { ConfigManager, ConfigError, loadConfig, type ConfigValidator } from '../src/config-manager.js';
+import { ConfigManager, ConfigError, loadConfig, type ConfigValidator } from '../../src/config/config-manager.js';
 import { join } from 'path';
 import { unlink } from 'node:fs/promises';
 

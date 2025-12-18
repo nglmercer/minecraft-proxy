@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { readVarIntSync, writeVarIntSync, varIntLength } from '../src/varint.js';
+import { readVarIntSync, writeVarIntSync, varIntLength } from '../../src/core/varint.js';
 
 describe('VarInt', () => {
   test('readVarIntSync - single byte', () => {

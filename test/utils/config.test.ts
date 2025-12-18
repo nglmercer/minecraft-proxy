@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { defaultConfig, createConfig, type ProxyConfig } from '../src/config.js';
+import { defaultConfig, createConfig, type ProxyConfig } from '../../src/config/config.js';
 
 describe('Config', () => {
   test('defaultConfig has correct values', () => {

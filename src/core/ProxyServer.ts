@@ -1,9 +1,9 @@
-import { createConfig, type ProxyConfig } from './config';
-import type { Transport, Connection } from './transports/Transport';
-import { TcpTransport } from './transports/TcpTransport';
-import { UdpTransport } from './transports/UdpTransport';
-import type { Protocol, Packet } from './protocols/Protocol';
-import { MinecraftProtocol } from './protocols/MinecraftProtocol';
+import { createConfig, type ProxyConfig } from '../config/config.js';
+import type { Transport, Connection } from '../transports/Transport.js';
+import { TcpTransport } from '../transports/TcpTransport.js';
+import { UdpTransport } from '../transports/UdpTransport.js';
+import type { Protocol, Packet } from '../protocols/Protocol.js';
+import { MinecraftProtocol } from '../protocols/MinecraftProtocol.js';
 
 const MAX_HANDSHAKE_SIZE = 4096; // 4KB
 const HANDSHAKE_TIMEOUT_MS = 5000;
