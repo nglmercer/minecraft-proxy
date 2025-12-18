@@ -7,8 +7,9 @@ import type { Socket } from 'bun';
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe('Reverse Tunnel (Bridge + Agent)', () => {
-    const BRIDGE_PORT = 30005; // Single port for both
-    const LOCAL_MC_PORT = 30007;
+    // Use dynamic ports to avoid conflicts
+    const BRIDGE_PORT = 30030 + Math.floor(Math.random() * 50);
+    const LOCAL_MC_PORT = 30090 + Math.floor(Math.random() * 50);
     const SECRET = 'test-secret';
 
     let bridge: BridgeServer;
@@ -42,6 +43,7 @@ describe('Reverse Tunnel (Bridge + Agent)', () => {
             port: BRIDGE_PORT,
             secret: SECRET,
             debug: false, // Set to true for debugging
+            domain: 'bridge.com' // Add domain for routing
         });
         bridge.start();
 
@@ -51,7 +53,7 @@ describe('Reverse Tunnel (Bridge + Agent)', () => {
             bridgeControlPort: BRIDGE_PORT,
             localHost: 'localhost',
             localPort: LOCAL_MC_PORT,
-            secret: SECRET,
+            secret: `${SECRET} test`, // Specify subdomain 'test' for routing
             debug: false,
         });
         agent.start();
@@ -76,6 +78,11 @@ describe('Reverse Tunnel (Bridge + Agent)', () => {
             hostname: 'localhost',
             port: BRIDGE_PORT,
             socket: {
+                open: (socket) => {
+                    // Send Minecraft handshake with subdomain
+                    const handshakePacket = createMinecraftHandshake('test', 'test.bridge.com', BRIDGE_PORT);
+                    socket.write(handshakePacket);
+                },
                 data: (socket, data) => {
                     clientReceivedData.push(Buffer.from(data));
                 },
@@ -111,6 +118,51 @@ describe('Reverse Tunnel (Bridge + Agent)', () => {
 
         playerClient.end();
     });
+    
+    // Helper functions
+    function writeVarInt(value: number): Buffer {
+        const bytes: number[] = [];
+        do {
+            let byte = value & 0x7F;
+            value >>>= 7;
+            if (value !== 0) byte |= 0x80;
+            bytes.push(byte);
+        } while (value !== 0);
+        return Buffer.from(bytes);
+    }
+    
+    function createMinecraftHandshake(username: string, serverAddress: string, serverPort: number): Buffer {
+        // Proper Minecraft handshake packet
+        // Protocol version (varint) - 763 for 1.20.1
+        const protocolVersion = writeVarInt(763);
+        
+        // Server address (string)
+        const addressBytes = Buffer.from(serverAddress);
+        const addressLength = writeVarInt(addressBytes.length);
+        
+        // Server port (unsigned short)
+        const portBuffer = Buffer.alloc(2);
+        portBuffer.writeUInt16BE(serverPort, 0);
+        
+        // Next state (varint) - 2 for login
+        const nextState = writeVarInt(2);
+        
+        // Combine all parts (packet ID 0x00 for handshake)
+        const packetId = writeVarInt(0x00);
+        const handshakeData = Buffer.concat([
+            packetId,
+            protocolVersion,
+            addressLength,
+            addressBytes,
+            portBuffer,
+            nextState
+        ]);
+        
+        // Packet length (varint)
+        const packetLength = writeVarInt(handshakeData.length);
+        
+        return Buffer.concat([packetLength, handshakeData]);
+    }
 
     test('should reject agent with incorrect secret', async () => {
         // Create a separate agent with wrong secret

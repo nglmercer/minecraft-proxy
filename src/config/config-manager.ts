@@ -201,6 +201,15 @@ export class ConfigManager<T extends object> {
         }
 
         const content = await configFile.text();
+        
+        // Handle empty or whitespace-only files
+        if (!content || content.trim().length === 0) {
+            if (!this.silent) {
+                console.warn(`Config file is empty, using defaults`);
+            }
+            return { ...this.defaultConfig };
+        }
+        
         try {
             const parsed = YAML.parse(content);
 
@@ -332,6 +341,10 @@ export class ConfigManager<T extends object> {
                     if (!this.silent) {
                         console.log('Configuration file changed, reloading...');
                     }
+                    
+                    // Add a small delay to ensure file write is complete
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                    
                     await this.load();
                     if (this.onChange) {
                         this.onChange(this.config);

@@ -16,6 +16,9 @@ export interface AgentConfig {
 
 interface ControlSocketData {
     buffer: string;
+    token?: string;
+    agentId?: string;
+    namespace?: string;
 }
 
 interface BridgeDataSocketData {
@@ -85,9 +88,21 @@ export class TunnelAgent {
                         if (!msg) continue;
 
                         if (msg.startsWith('AUTH_OK')) {
-                            const assignedDomain = msg.split(' ')[1];
+                            const parts = msg.split(' ');
+                            const assignedDomain = parts[1];
+                            const token = parts[2];
+                            
                             this.log(`Authenticated successfully. Domain: ${assignedDomain || 'default'}`);
                             this.controlSocket = socket;
+                            
+                            // Store token if provided (for token-based auth)
+                            if (token && assignedDomain) {
+                                socket.data.token = token;
+                                const [agentId, namespace] = assignedDomain.split('.');
+                                socket.data.agentId = agentId;
+                                socket.data.namespace = namespace;
+                                this.log(`Token received: ${token.substring(0, 8)}...`);
+                            }
                             continue;
                         }
 

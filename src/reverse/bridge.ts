@@ -1,6 +1,6 @@
 import type { Socket } from 'bun';
-import { randomUUID, timingSafeEqual } from 'node:crypto';
-
+import { randomUUID } from 'node:crypto';
+import { timingSafeEqual } from 'node:crypto';
 export interface BridgeConfig {
     port: number;
     secret: string;
