@@ -278,7 +278,10 @@ export class BridgeServer {
                 targetAgentId = host.split('.')[0] || null; 
             }
         } catch (e) {
-            this.log(`Failed to parse handshake from ${socket.remoteAddress}: ${e}`);
+            // Handshake parse failed. This might happen if the packet is small or strange.
+            // In Single-Tenant mode, this is OKAY! We just want to route traffic.
+            this.log(`Handshake parse incomplete. Proceeding to fallback checks...`);
+            console.log("BridgeServer",e);
         }
 
         if (!targetAgentId) {

@@ -156,6 +156,7 @@ export class TunnelAgent {
 
         this.log(`Opening tunnel for connection ${connId}...`);
         this.activeConnections.add(connId);
+        this.stats.set(connId, { rx: 0, tx: 0 });
 
         // 1. Connect to Local Minecraft Server
         Bun.connect<LocalSocketData>({
@@ -175,11 +176,12 @@ export class TunnelAgent {
 
                                 const header = Buffer.from(`DATA ${connId}\n`);
                                 bridgeDataSocket.write(header);
+                                const payload = Buffer.concat(localSocket.data.buffer);
 
                                 if (localSocket.data.buffer.length > 0) {
-                                    const payload = Buffer.concat(localSocket.data.buffer);
                                     this.log(`Flushing ${payload.length} bytes of buffered data to bridge`);
                                     bridgeDataSocket.write(payload);
+                                    this.updateStats(connId, 'tx', payload.length);
                                     localSocket.data.buffer = [];
                                 }
 
@@ -187,10 +189,14 @@ export class TunnelAgent {
                             },
                             data: (bridgeDataSocket, data) => {
                                 const target = bridgeDataSocket.data?.target;
-                                if (target) target.write(data);
+                                if (target) {
+                                    target.write(data);
+                                    this.updateStats(connId, 'rx', data.length);
+                                }
                             },
                             close: (bridgeDataSocket) => {
                                 const target = bridgeDataSocket.data?.target;
+                                this.log(`Bridge Data Channel closed for ${connId}`);
                                 if (target) target.end();
                             },
                             error: (bridgeDataSocket) => {
@@ -207,6 +213,7 @@ export class TunnelAgent {
                     const state = localSocket.data;
                     if (state.target) {
                         state.target.write(data);
+                        this.updateStats(connId, 'tx', data.length);
                     } else {
                         // Check buffer limits
                         const currentSize = state.buffer.reduce((acc, c) => acc + c.length, 0);
@@ -220,6 +227,9 @@ export class TunnelAgent {
                 },
                 close: (localSocket) => {
                     this.activeConnections.delete(connId);
+                    const finalStats = this.stats.get(connId) || {rx:0, tx:0};
+                    this.log(`Local connection ${connId} closed. Total RX(from Bridge): ${finalStats.rx}, Total TX(to Bridge): ${finalStats.tx}`);
+                    this.stats.delete(connId);
                     const state = localSocket.data;
                     if (state?.target) {
                         state.target.end();
@@ -241,5 +251,17 @@ export class TunnelAgent {
 
     private log(msg: string) {
         if (this.config.debug) console.log(`[Agent] ${msg}`);
+    }
+
+    // Helper to track stats per connection
+    private stats = new Map<string, { rx: number, tx: number }>();
+
+    private updateStats(connId: string, type: 'rx' | 'tx', bytes: number) {
+        let stat = this.stats.get(connId);
+        if (!stat) {
+            stat = { rx: 0, tx: 0 };
+            this.stats.set(connId, stat);
+        }
+        stat[type] += bytes;
     }
 }

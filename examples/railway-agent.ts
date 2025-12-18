@@ -23,7 +23,7 @@ console.log(`Forwarding to Local MC: localhost:${LOCAL_MC_PORT}`);
 const agent = new TunnelAgent({
     bridgeHost: RAILWAY_PROXY_HOST,
     bridgeControlPort: RAILWAY_PROXY_PORT,
-    localHost: 'localhost',
+    localHost: '127.0.0.1',
     localPort: LOCAL_MC_PORT,
     secret: SECRET,
     debug: true,
