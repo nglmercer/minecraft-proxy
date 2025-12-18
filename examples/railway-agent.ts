@@ -20,12 +20,17 @@ console.log('--- Starting Railway Agent ---');
 console.log(`Connecting to Railway: ${RAILWAY_PROXY_HOST}:${RAILWAY_PROXY_PORT}`);
 console.log(`Forwarding to Local MC: localhost:${LOCAL_MC_PORT}`);
 
+// Extract subdomain from host (e.g., "caboose.proxy.rlwy.net" -> "caboose")
+const subdomain = RAILWAY_PROXY_HOST.split('.')[0];
+console.log(`Using Agent ID: ${subdomain}`);
+
 const agent = new TunnelAgent({
     bridgeHost: RAILWAY_PROXY_HOST,
     bridgeControlPort: RAILWAY_PROXY_PORT,
     localHost: '127.0.0.1',
     localPort: LOCAL_MC_PORT,
     secret: SECRET,
+    agentId: subdomain,
     debug: true,
 });
 

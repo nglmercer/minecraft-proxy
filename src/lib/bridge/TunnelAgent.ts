@@ -11,6 +11,8 @@ export interface AgentConfig {
     localPort: number;
     /** Secret token to authenticate with the bridge */
     secret: string;
+    /** Optional: Requested subdomain/agent ID */
+    agentId?: string;
     debug?: boolean;
 }
 
@@ -66,7 +68,7 @@ export class TunnelAgent {
                 open: (socket) => {
                     socket.data = { buffer: '' };
                     this.log('Connected to Bridge. Authenticating...');
-                    socket.write(`AUTH ${this.config.secret}\n`);
+                    socket.write(`AUTH ${this.config.secret} ${this.config.agentId || ''}\n`);
                 },
                 data: (socket, data) => {
                     const chunk = data.toString();
